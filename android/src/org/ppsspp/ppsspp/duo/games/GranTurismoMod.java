@@ -28,9 +28,10 @@ import java.util.Locale;
 // - car body: the object with class pointers 0x08CFF290 / 0x08CFF2D0 at +0x48 / +0x50 and a
 //   1.0 at +0x9C. It holds a 4x4 matrix at +0x60; the third row (+0x80) points backwards and the
 //   position is at +0x90 (x, height, z; x and z are the ground plane).
-// - telemetry holder: 0x08CC5AD0 at +0x00 and 0x08D75EB0 at +0x1C; +0x18 points to the telemetry:
-//   +0x40 rpm (f32), +0x44 red line start and end (two u16), +0x48 speed in km/h (f32),
-//   +0x50 brake, +0x54 throttle (0..1).
+// - telemetry holder: 0x08CC5AD0 at +0x00 and 0x08D75EB0 at +0x1C; +0x18 points to three copies
+//   of the telemetry block, 0x14C apart (which ones are live varies between races):
+//   +0x24 gear as an ASCII character in the low byte, +0x40 rpm (f32), +0x44 red line start and
+//   end (two u16), +0x48 speed in km/h (f32), +0x50 brake, +0x54 throttle (0..1).
 public final class GranTurismoMod extends DuoMod {
 	public static final String ID = "gran_turismo";
 	private static final String TAG = "PPSSPPDuo";
@@ -43,6 +44,9 @@ public final class GranTurismoMod extends DuoMod {
 	private static final int[] CAR_VALUES = {0x08CFF290, 0x08CFF2D0, 0x3F800000};
 	private static final int[] HOLDER_OFFSETS = {0x00, 0x1C};
 	private static final int[] HOLDER_VALUES = {0x08CC5AD0, 0x08D75EB0};
+
+	private static final int TELEMETRY_COPY = 0x14C;
+	private static final int TELEMETRY_COPIES = 3;
 
 	private static final int W_CAR = 0;
 	private static final int W_HOLDER = 1;
@@ -101,7 +105,7 @@ public final class GranTurismoMod extends DuoMod {
 	private void watch() {
 		host.setMemoryWatches(
 			new int[] {car != 0 ? car : SCAN_START, holder != 0 ? holder : SCAN_START, telemetry != 0 ? telemetry : SCAN_START},
-			new int[] {0xA0, 0x20, 0x60});
+			new int[] {0xA0, 0x20, TELEMETRY_COPY * TELEMETRY_COPIES + 0x60});
 	}
 
 	private void search() {
@@ -182,14 +186,30 @@ public final class GranTurismoMod extends DuoMod {
 						byte[] tm = host.readMemoryWatch(W_TELEMETRY);
 						if (tm != null) {
 							ByteBuffer tb = le(tm);
-							float rpm = tb.getFloat(0x40);
-							int redStart = tb.getShort(0x44) & 0xFFFF;
-							int redEnd = tb.getShort(0x46) & 0xFFFF;
-							float speed = tb.getFloat(0x48);
-							float brake = tb.getFloat(0x50);
-							float throttle = tb.getFloat(0x54);
+							// Three copies of the block, 0x14C apart. Which ones are live differs between
+							// races (one stays at zero or frozen), so use the one with the highest rpm.
+							int o = 0;
+							for (int k = 1; k < TELEMETRY_COPIES; k++) {
+								if (tb.getFloat(k * TELEMETRY_COPY + 0x40) > tb.getFloat(o + 0x40)) {
+									o = k * TELEMETRY_COPY;
+								}
+							}
+							float rpm = tb.getFloat(o + 0x40);
+							int redStart = tb.getShort(o + 0x44) & 0xFFFF;
+							int redEnd = tb.getShort(o + 0x46) & 0xFFFF;
+							float speed = tb.getFloat(o + 0x48);
+							float brake = tb.getFloat(o + 0x50);
+							float throttle = tb.getFloat(o + 0x54);
+							// Gear as an ASCII character (1-6, N, R, D) in the low byte of +0x24; only one copy has it.
+							char gear = 0;
+							for (int k = 0; k < TELEMETRY_COPIES && gear == 0; k++) {
+								int g = tb.get(k * TELEMETRY_COPY + 0x24) & 0xFF;
+								if ((g >= '1' && g <= '9') || g == 'N' || g == 'R' || g == 'D') {
+									gear = (char)g;
+								}
+							}
 							if (rpm >= 0 && rpm < 30000 && speed > -50 && speed < 1000) {
-								view.setTelemetry(speed, rpm, redStart, redEnd, throttle, brake);
+								view.setTelemetry(speed, rpm, redStart, redEnd, throttle, brake, gear);
 								haveTelemetry = true;
 							}
 						}
@@ -268,6 +288,7 @@ public final class GranTurismoMod extends DuoMod {
 		private float carX, carZ, dirX, dirZ = 1;
 		private boolean hasTelemetry;
 		private float speed, rpm, throttle, brake;
+		private char gear;
 		private int redStart, redEnd;
 		private float shownRpmMax = 8000;
 
@@ -300,9 +321,10 @@ public final class GranTurismoMod extends DuoMod {
 			hasCar = true;
 		}
 
-		void setTelemetry(float speed, float rpm, int redStart, int redEnd, float throttle, float brake) {
+		void setTelemetry(float speed, float rpm, int redStart, int redEnd, float throttle, float brake, char gear) {
 			boolean changed = Math.abs(speed - this.speed) > 0.2f || Math.abs(rpm - this.rpm) > 20
-				|| Math.abs(throttle - this.throttle) > 0.02f || Math.abs(brake - this.brake) > 0.02f;
+				|| Math.abs(throttle - this.throttle) > 0.02f || Math.abs(brake - this.brake) > 0.02f || gear != this.gear;
+			this.gear = gear;
 			this.speed = speed;
 			this.rpm = rpm;
 			this.redStart = redStart;
@@ -374,6 +396,19 @@ public final class GranTurismoMod extends DuoMod {
 				double a = Math.toRadians(start + sweep * i / ticks);
 				float ri = radius - stroke * 2.2f;
 				canvas.drawText(String.valueOf(i), cx + (float)Math.cos(a) * ri, cy + (float)Math.sin(a) * ri + radius * 0.04f, paint);
+			}
+
+			// Gear above the speed.
+			if (hasTelemetry && gear != 0) {
+				float gs = radius * 0.14f;
+				float gy = cy - radius * 0.45f;
+				rect.set(cx - gs, gy - gs, cx + gs, gy + gs);
+				paint.setStyle(Paint.Style.FILL);
+				paint.setColor(DuoUi.COLOR_SURFACE_PRESSED);
+				canvas.drawRoundRect(rect, gs * 0.3f, gs * 0.3f, paint);
+				paint.setColor(DuoUi.COLOR_TEXT);
+				paint.setTextSize(gs * 1.4f);
+				canvas.drawText(String.valueOf(gear), cx, rect.centerY() - (paint.descent() + paint.ascent()) / 2, paint);
 			}
 
 			// Speed in the middle.

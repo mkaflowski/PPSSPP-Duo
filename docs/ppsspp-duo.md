@@ -74,7 +74,8 @@ public final class MyMod extends DuoMod {
   forward, alt. speed, rewind, pause menu, pause, screenshot, mute.
 - **Gamepad**: all PSP buttons and the analog stick, multi-touch.
 - **Drums** (Patapon 1: UCES00995 tested, other releases by ID or title): drum pads and a song book that follows
-  your drumming, physical buttons included. Next step: a beat indicator from the game's rhythm
+  your drumming, physical buttons included. The pads can show the game's own drum artwork, read
+  from `DATA_CMN.BND` at runtime (see `PataponArt`) and cached as a PNG. Next step: a beat indicator from the game's rhythm
   timer (needs its address, from a savestate taken during a mission).
 - **Map** (GTA: Liberty City Stories): the city map built at runtime from the game's 64 radar
   textures in `GTA3PSPHR.IMG` (read through `readGameFile`, cached as a PNG in the app's files),
@@ -85,6 +86,9 @@ public final class MyMod extends DuoMod {
 - **Lumines** (ULES00043 v1.01; other releases by title): big preview of the three next blocks,
   score, high score, squares deleted, time and how full the board is. The game objects are on its
   heap, so they're found with a signature scan every session (see `LuminesMod`).
+- **Telemetry** (Gran Turismo, UCES01245 v2.00): speed, rpm against the car's red line, gear,
+  throttle and brake, and a map of the track drawn from the car's position as you drive. The car
+  and telemetry objects are found by signature scans every race (see `GranTurismoMod`).
 - **Screen off**: black, tab bar hidden.
 - **Diagnostics**: raw status, display info, memory dump.
 
