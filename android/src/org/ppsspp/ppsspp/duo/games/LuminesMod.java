@@ -265,48 +265,64 @@ public final class LuminesMod extends DuoMod {
 				return;
 			}
 
+			// Both columns are centered vertically, inside a margin that keeps clear of the
+			// panel's rounded corners.
+			float pad = DuoUi.dp(ctx, 32);
+			float colW = w * 0.46f;
+
 			// Left: next blocks, the soonest at the top and biggest.
-			float colW = w * 0.48f;
 			float[] sizes = {1.0f, 0.8f, 0.65f};
 			float total = 0;
 			for (float s : sizes) {
 				total += s;
 			}
-			float labelH = DuoUi.dp(ctx, 22);
-			float avail = h - 2 * m - labelH;
-			float unit = Math.min(avail / (total + 0.5f), colW - 2 * m);
-			paint.setTextAlign(Paint.Align.LEFT);
+			float labelH = DuoUi.dp(ctx, 24);
+			float gapUnits = 0.25f;
+			float unit = Math.min((h - 2 * pad - labelH) / (total + 2 * gapUnits), colW - pad);
+			float queueH = labelH + unit * (total + 2 * gapUnits);
+			float y = (h - queueH) / 2;
+			float colCenter = pad + (colW - pad) / 2;
+			paint.setTextAlign(Paint.Align.CENTER);
 			paint.setTextSize(DuoUi.dp(ctx, 15));
 			paint.setColor(DuoUi.COLOR_TEXT_DIM);
-			canvas.drawText(ctx.getString(R.string.duo_lumines_next), m, m + DuoUi.dp(ctx, 15), paint);
-			float y = m + labelH;
+			canvas.drawText(ctx.getString(R.string.duo_lumines_next), colCenter, y + DuoUi.dp(ctx, 15), paint);
+			y += labelH;
 			for (int i = 0; i < 3; i++) {
 				float size = unit * sizes[i];
-				float x = m + (colW - 2 * m - size) / 2;
-				drawBlock(canvas, blocks[i + 1], x, y, size);
-				y += size + unit * 0.5f / 2;
+				drawBlock(canvas, blocks[i + 1], colCenter - size / 2, y, size);
+				y += size + unit * gapUnits;
 			}
 
 			// Right: stats.
-			float left = colW + m;
-			float right = w - m;
-			y = m;
-			y = stat(canvas, ctx.getString(R.string.duo_lumines_score), String.format(Locale.US, "%,d", stats[0]), left, right, y, 34);
-			y = stat(canvas, ctx.getString(R.string.duo_lumines_hiscore), String.format(Locale.US, "%,d", stats[1]), left, right, y, 20);
-			y = stat(canvas, ctx.getString(R.string.duo_lumines_deleted), String.valueOf(stats[2]), left, right, y, 26);
-			int secs = stats[3] / 60;
-			y = stat(canvas, ctx.getString(R.string.duo_lumines_time), String.format(Locale.US, "%d:%02d", secs / 60, secs % 60), left, right, y, 26);
-
-			// Board fill, the danger meter.
+			float left = colW + pad;
+			float right = w - pad;
 			int empty = Math.max(0, Math.min(BOARD_CELLS, stats[4]));
 			float fill = (BOARD_CELLS - empty) / (float)BOARD_CELLS;
+			int secs = stats[3] / 60;
+			String[] labels = {
+				ctx.getString(R.string.duo_lumines_score), ctx.getString(R.string.duo_lumines_hiscore),
+				ctx.getString(R.string.duo_lumines_deleted), ctx.getString(R.string.duo_lumines_time)};
+			String[] values = {
+				String.format(Locale.US, "%,d", stats[0]), String.format(Locale.US, "%,d", stats[1]),
+				String.valueOf(stats[2]), String.format(Locale.US, "%d:%02d", secs / 60, secs % 60)};
+			float[] valueSp = {34, 20, 26, 26};
+			float barH = DuoUi.dp(ctx, 18);
+			float fillH = DuoUi.dp(ctx, 30) + barH;
+			float statsH = fillH;
+			for (float sp : valueSp) {
+				statsH += statHeight(sp);
+			}
+			y = (h - statsH) / 2;
+			for (int i = 0; i < labels.length; i++) {
+				y = stat(canvas, labels[i], values[i], left, right, y, valueSp[i]);
+			}
+
+			// Board fill, the danger meter.
 			paint.setTextSize(DuoUi.dp(ctx, 14));
 			paint.setColor(DuoUi.COLOR_TEXT_DIM);
 			paint.setTextAlign(Paint.Align.LEFT);
-			y += DuoUi.dp(ctx, 8);
-			canvas.drawText(ctx.getString(R.string.duo_lumines_fill, Math.round(fill * 100)), left, y + DuoUi.dp(ctx, 14), paint);
-			y += DuoUi.dp(ctx, 22);
-			float barH = DuoUi.dp(ctx, 18);
+			canvas.drawText(ctx.getString(R.string.duo_lumines_fill, Math.round(fill * 100)), left, y + DuoUi.dp(ctx, 20), paint);
+			y += DuoUi.dp(ctx, 30);
 			rect.set(left, y, right, y + barH);
 			paint.setColor(DuoUi.COLOR_SURFACE);
 			canvas.drawRoundRect(rect, barH / 2, barH / 2, paint);
@@ -315,19 +331,22 @@ public final class LuminesMod extends DuoMod {
 			canvas.drawRoundRect(rect, barH / 2, barH / 2, paint);
 		}
 
+		private float statHeight(float valueSp) {
+			Context ctx = getContext();
+			return DuoUi.dp(ctx, 16) + DuoUi.dp(ctx, valueSp) + DuoUi.dp(ctx, 4) + DuoUi.dp(ctx, 8);
+		}
+
 		private float stat(Canvas canvas, String label, String value, float left, float right, float y, float valueSp) {
 			Context ctx = getContext();
 			paint.setTextAlign(Paint.Align.LEFT);
 			paint.setTextSize(DuoUi.dp(ctx, 14));
 			paint.setColor(DuoUi.COLOR_TEXT_DIM);
-			y += DuoUi.dp(ctx, 16);
-			canvas.drawText(label, left, y, paint);
+			canvas.drawText(label, left, y + DuoUi.dp(ctx, 16), paint);
 			paint.setTextAlign(Paint.Align.RIGHT);
 			paint.setTextSize(DuoUi.dp(ctx, valueSp));
 			paint.setColor(DuoUi.COLOR_TEXT);
-			y += DuoUi.dp(ctx, valueSp) + DuoUi.dp(ctx, 4);
-			canvas.drawText(value, right, y, paint);
-			return y + DuoUi.dp(ctx, 6);
+			canvas.drawText(value, right, y + DuoUi.dp(ctx, 16) + DuoUi.dp(ctx, valueSp) + DuoUi.dp(ctx, 4), paint);
+			return y + statHeight(valueSp);
 		}
 
 		// cells: TL, TR, BL, BR.
