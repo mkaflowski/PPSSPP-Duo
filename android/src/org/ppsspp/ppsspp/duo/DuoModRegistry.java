@@ -1,6 +1,7 @@
 package org.ppsspp.ppsspp.duo;
 
 import org.ppsspp.ppsspp.duo.games.GtaLcsMapMod;
+import org.ppsspp.ppsspp.duo.games.LuminesMod;
 import org.ppsspp.ppsspp.duo.games.PataponMod;
 import org.ppsspp.ppsspp.duo.mods.BlankMod;
 import org.ppsspp.ppsspp.duo.mods.DashboardMod;
@@ -24,6 +25,7 @@ public final class DuoModRegistry {
 		// Game-specific mods. They hide themselves for other games.
 		mods.add(new PataponMod());
 		mods.add(new GtaLcsMapMod());
+		mods.add(new LuminesMod());
 		mods.add(new BlankMod());
 		mods.add(new DiagnosticsMod());
 		return Collections.unmodifiableList(mods);

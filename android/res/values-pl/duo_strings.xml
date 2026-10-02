@@ -55,6 +55,16 @@
 
     <string name="duo_gta_rotate">Obracaj mapę razem z graczem</string>
 
+    <string name="duo_mod_lumines">Lumines</string>
+    <string name="duo_mod_lumines_desc">Lumines: duży podgląd następnych klocków, wynik i zapełnienie planszy</string>
+    <string name="duo_lumines_idle">Zacznij grę, żeby zobaczyć następne klocki</string>
+    <string name="duo_lumines_waiting">Czekam na grę… (ta wersja może nie być obsługiwana)</string>
+    <string name="duo_lumines_next">NASTĘPNE</string>
+    <string name="duo_lumines_score">Wynik</string>
+    <string name="duo_lumines_hiscore">Rekord</string>
+    <string name="duo_lumines_deleted">Usunięte</string>
+    <string name="duo_lumines_time">Czas</string>
+    <string name="duo_lumines_fill">Plansza zapełniona w %1$d%%</string>
     <string name="duo_mod_diagnostics">Diagnostyka</string>
     <string name="duo_mod_diagnostics_desc">Stan emulatora, informacje o ekranie i podgląd pamięci, dla twórców modów</string>
 </resources>

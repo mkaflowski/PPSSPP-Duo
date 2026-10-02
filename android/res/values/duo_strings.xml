@@ -55,6 +55,16 @@
 
     <string name="duo_gta_rotate">Turn the map with the player</string>
 
+    <string name="duo_mod_lumines">Lumines</string>
+    <string name="duo_mod_lumines_desc">Lumines: big preview of the next blocks, score and how full the board is</string>
+    <string name="duo_lumines_idle">Start a game to see the next blocks</string>
+    <string name="duo_lumines_waiting">Waiting for a game… (this version may not be supported)</string>
+    <string name="duo_lumines_next">NEXT</string>
+    <string name="duo_lumines_score">Score</string>
+    <string name="duo_lumines_hiscore">High score</string>
+    <string name="duo_lumines_deleted">Deleted</string>
+    <string name="duo_lumines_time">Time</string>
+    <string name="duo_lumines_fill">Board %1$d%% full</string>
     <string name="duo_mod_diagnostics">Diagnostics</string>
     <string name="duo_mod_diagnostics_desc">Emulator status, display info and a memory view, for mod developers</string>
 </resources>

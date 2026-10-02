@@ -82,6 +82,9 @@ public final class MyMod extends DuoMod {
   arrows when off screen) and a heading-up mode. The player pointer and the blip array are found
   by signature scans and cached per game version (on ULES00151 v3.00: `0x08B35EF8` and
   `0x08E4AAA0`), so other releases should work as long as those structures look the same.
+- **Lumines** (ULES00043 v1.01; other releases by title): big preview of the three next blocks,
+  score, high score, squares deleted, time and how full the board is. The game objects are on its
+  heap, so they're found with a signature scan every session (see `LuminesMod`).
 - **Screen off**: black, tab bar hidden.
 - **Diagnostics**: raw status, display info, memory dump.
 
