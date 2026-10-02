@@ -1,5 +1,6 @@
 package org.ppsspp.ppsspp.duo;
 
+import org.ppsspp.ppsspp.duo.games.PataponMod;
 import org.ppsspp.ppsspp.duo.mods.BlankMod;
 import org.ppsspp.ppsspp.duo.mods.DashboardMod;
 import org.ppsspp.ppsspp.duo.mods.DiagnosticsMod;
@@ -19,6 +20,8 @@ public final class DuoModRegistry {
 		List<DuoMod> mods = new ArrayList<>();
 		mods.add(new DashboardMod());
 		mods.add(new GamepadMod());
+		// Game-specific mods. They hide themselves for other games.
+		mods.add(new PataponMod());
 		mods.add(new BlankMod());
 		mods.add(new DiagnosticsMod());
 		return Collections.unmodifiableList(mods);

@@ -37,6 +37,10 @@ public interface DuoModContext {
 
 	void setAnalog(int stick, float x, float y);
 
+	// Button presses since the last call (any source), oldest first. Sampled once per frame and
+	// buffered (up to 64), so poll at least a few times per second if you need every press.
+	java.util.List<DuoButtonPress> pollButtonPresses();
+
 	// Memory ranges copied every frame while this mod is active. Cleared when the mod is deactivated.
 	boolean setMemoryWatches(int[] addresses, int[] sizes);
 

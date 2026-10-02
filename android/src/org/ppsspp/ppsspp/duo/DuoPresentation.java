@@ -175,7 +175,7 @@ final class DuoPresentation extends Presentation implements DuoModContext {
 		tab.setTextSize(15);
 		tab.setTypeface(Typeface.DEFAULT_BOLD);
 		tab.setSingleLine(true);
-		int padH = DuoUi.dp(ctx, 14);
+		int padH = DuoUi.dp(ctx, 12);
 		int padV = DuoUi.dp(ctx, 4);
 		tab.setPadding(padH, padV, padH, padV);
 		return tab;
@@ -184,7 +184,7 @@ final class DuoPresentation extends Presentation implements DuoModContext {
 	private LinearLayout.LayoutParams tabLayoutParams() {
 		Context ctx = getContext();
 		LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, DuoUi.dp(ctx, 36));
-		lp.setMargins(DuoUi.dp(ctx, 3), 0, DuoUi.dp(ctx, 3), 0);
+		lp.setMargins(DuoUi.dp(ctx, 2), 0, DuoUi.dp(ctx, 2), 0);
 		return lp;
 	}
 
@@ -364,6 +364,8 @@ final class DuoPresentation extends Presentation implements DuoModContext {
 		activeMod = mod;
 		tabBarWanted = true;
 		applyTabBarVisibility();
+		// Don't hand the new mod presses that happened before it existed.
+		DuoNative.nativeGetButtonPresses();
 		Log.i(TAG, "Activating mod " + mod.getId());
 		View view;
 		try {
@@ -539,6 +541,11 @@ final class DuoPresentation extends Presentation implements DuoModContext {
 	@Override
 	public void setAnalog(int stick, float x, float y) {
 		DuoNative.nativeAnalog(stick, x, y);
+	}
+
+	@Override
+	public List<DuoButtonPress> pollButtonPresses() {
+		return DuoButtonPress.fromNative(DuoNative.nativeGetButtonPresses());
 	}
 
 	@Override

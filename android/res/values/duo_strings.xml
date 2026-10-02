@@ -37,6 +37,17 @@
     <string name="duo_mod_gamepad_desc">Touch controls for all PSP buttons and the analog stick</string>
     <string name="duo_mod_blank">Screen off</string>
     <string name="duo_mod_blank_desc">Black screen. Tap the top edge to bring the tabs back</string>
+    <string name="duo_mod_patapon">Drums</string>
+    <string name="duo_mod_patapon_desc">Patapon: drum pads and a song book that follows your drumming</string>
+    <string name="duo_patapon_march">March</string>
+    <string name="duo_patapon_attack">Attack</string>
+    <string name="duo_patapon_defend">Defend</string>
+    <string name="duo_patapon_charge">Charge</string>
+    <string name="duo_patapon_retreat">Retreat</string>
+    <string name="duo_patapon_jump">Jump</string>
+    <string name="duo_patapon_party">Party</string>
+    <string name="duo_patapon_miracle">Miracle</string>
+
     <string name="duo_mod_diagnostics">Diagnostics</string>
     <string name="duo_mod_diagnostics_desc">Emulator status, display info and a memory view, for mod developers</string>
 </resources>

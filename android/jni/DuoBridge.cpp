@@ -112,6 +112,16 @@ std::mutex g_statusLock;
 Status g_status;
 std::string g_iconData;
 
+// PSP buttons that went down, from any source (physical pad, touch controls, the second screen).
+struct ButtonPress {
+	uint32_t buttons;
+	int32_t timeMs;
+};
+constexpr size_t MAX_BUTTON_PRESSES = 64;
+std::mutex g_pressLock;
+std::vector<ButtonPress> g_presses;
+uint32_t g_prevButtons = 0;  // emu thread only
+
 // Emu thread only.
 uint32_t g_heldButtons = 0;
 std::vector<uint32_t> g_heldVirtKeys;
@@ -300,6 +310,22 @@ void UpdateStatus(double now) {
 	g_status = std::move(s);
 }
 
+// Sampled once per host frame, so a press shorter than a frame can be missed. Games poll at most
+// once per frame too, so that's rarely a press the game saw.
+void UpdateButtonPresses(double now, bool running) {
+	const uint32_t buttons = running ? __CtrlPeekButtons() : 0;
+	const uint32_t pressed = buttons & ~g_prevButtons;
+	g_prevButtons = buttons;
+	if (!pressed) {
+		return;
+	}
+	std::lock_guard<std::mutex> guard(g_pressLock);
+	if (g_presses.size() >= MAX_BUTTON_PRESSES) {
+		g_presses.erase(g_presses.begin());
+	}
+	g_presses.push_back(ButtonPress{ pressed, (int32_t)(now * 1000.0) });
+}
+
 void UpdateWatches(bool running) {
 	std::lock_guard<std::mutex> guard(g_watchLock);
 	for (Watch &w : g_watches) {
@@ -331,6 +357,7 @@ void DuoBridge_OnFrame() {
 	ProcessCommands(now);
 	ApplyAnalog(inGame);
 	UpdateStatus(now);
+	UpdateButtonPresses(now, inGame);
 	UpdateWatches(running);
 }
 
@@ -412,6 +439,26 @@ JNIEXPORT jbyteArray JNICALL Java_org_ppsspp_ppsspp_duo_DuoNative_nativeGetIcon(
 	}
 	jbyteArray result = env->NewByteArray((jsize)g_iconData.size());
 	env->SetByteArrayRegion(result, 0, (jsize)g_iconData.size(), (const jbyte *)g_iconData.data());
+	return result;
+}
+
+JNIEXPORT jintArray JNICALL Java_org_ppsspp_ppsspp_duo_DuoNative_nativeGetButtonPresses(JNIEnv *env, jclass) {
+	std::vector<ButtonPress> presses;
+	{
+		std::lock_guard<std::mutex> guard(g_pressLock);
+		presses.swap(g_presses);
+	}
+	if (presses.empty()) {
+		return nullptr;
+	}
+	std::vector<jint> flat;
+	flat.reserve(presses.size() * 2);
+	for (const ButtonPress &p : presses) {
+		flat.push_back((jint)p.buttons);
+		flat.push_back((jint)p.timeMs);
+	}
+	jintArray result = env->NewIntArray((jsize)flat.size());
+	env->SetIntArrayRegion(result, 0, (jsize)flat.size(), flat.data());
 	return result;
 }
 

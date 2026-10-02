@@ -37,6 +37,17 @@
     <string name="duo_mod_gamepad_desc">Dotykowe sterowanie: wszystkie przyciski PSP i gałka analogowa</string>
     <string name="duo_mod_blank">Ekran wyłączony</string>
     <string name="duo_mod_blank_desc">Czarny ekran. Dotknij górnej krawędzi, żeby wróciły zakładki</string>
+    <string name="duo_mod_patapon">Bębny</string>
+    <string name="duo_mod_patapon_desc">Patapon: bębny i śpiewnik, który podąża za twoim rytmem</string>
+    <string name="duo_patapon_march">Marsz</string>
+    <string name="duo_patapon_attack">Atak</string>
+    <string name="duo_patapon_defend">Obrona</string>
+    <string name="duo_patapon_charge">Szarża</string>
+    <string name="duo_patapon_retreat">Odwrót</string>
+    <string name="duo_patapon_jump">Skok</string>
+    <string name="duo_patapon_party">Impreza</string>
+    <string name="duo_patapon_miracle">Cud</string>
+
     <string name="duo_mod_diagnostics">Diagnostyka</string>
     <string name="duo_mod_diagnostics_desc">Stan emulatora, informacje o ekranie i podgląd pamięci, dla twórców modów</string>
 </resources>

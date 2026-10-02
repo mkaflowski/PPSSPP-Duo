@@ -17,6 +17,7 @@ import org.ppsspp.ppsspp.duo.DuoModContext;
 import org.ppsspp.ppsspp.duo.DuoNative;
 import org.ppsspp.ppsspp.duo.DuoStatus;
 import org.ppsspp.ppsspp.duo.DuoUi;
+import org.ppsspp.ppsspp.duo.PspSymbols;
 
 // Full PSP touch gamepad on the second screen, multi-touch.
 public final class GamepadMod extends DuoMod {
@@ -67,11 +68,6 @@ public final class GamepadMod extends DuoMod {
 	}
 
 	private static final class GamepadView extends View {
-		private static final int FACE_TRIANGLE = 0xFF3FD3A5;
-		private static final int FACE_CIRCLE = 0xFFF2637E;
-		private static final int FACE_CROSS = 0xFF7FA8F5;
-		private static final int FACE_SQUARE = 0xFFE58AD8;
-
 		private final DuoModContext host;
 		private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
 		private final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -298,10 +294,10 @@ public final class GamepadMod extends DuoMod {
 
 			drawDpad(canvas, alpha);
 
-			drawFace(canvas, faceX, faceY - faceR + faceButtonR, DuoNative.CTRL_TRIANGLE, FACE_TRIANGLE, 0, alpha);
-			drawFace(canvas, faceX + faceR - faceButtonR, faceY, DuoNative.CTRL_CIRCLE, FACE_CIRCLE, 1, alpha);
-			drawFace(canvas, faceX, faceY + faceR - faceButtonR, DuoNative.CTRL_CROSS, FACE_CROSS, 2, alpha);
-			drawFace(canvas, faceX - faceR + faceButtonR, faceY, DuoNative.CTRL_SQUARE, FACE_SQUARE, 3, alpha);
+			drawFace(canvas, faceX, faceY - faceR + faceButtonR, DuoNative.CTRL_TRIANGLE, PspSymbols.COLOR_TRIANGLE, PspSymbols.TRIANGLE, alpha);
+			drawFace(canvas, faceX + faceR - faceButtonR, faceY, DuoNative.CTRL_CIRCLE, PspSymbols.COLOR_CIRCLE, PspSymbols.CIRCLE, alpha);
+			drawFace(canvas, faceX, faceY + faceR - faceButtonR, DuoNative.CTRL_CROSS, PspSymbols.COLOR_CROSS, PspSymbols.CROSS, alpha);
+			drawFace(canvas, faceX - faceR + faceButtonR, faceY, DuoNative.CTRL_SQUARE, PspSymbols.COLOR_SQUARE, PspSymbols.SQUARE, alpha);
 
 			// Stick.
 			fill.setColor(DuoUi.COLOR_SURFACE);
@@ -352,7 +348,7 @@ public final class GamepadMod extends DuoMod {
 			canvas.drawRect(dpadX - arm, dpadY - arm, dpadX + arm, dpadY + arm, fill);
 		}
 
-		// symbol: 0 triangle, 1 circle, 2 cross, 3 square.
+		// symbol: a PspSymbols constant.
 		private void drawFace(Canvas canvas, float x, float y, int bit, int color, int symbol, int alpha) {
 			boolean down = (heldMask & bit) != 0;
 			fill.setColor(down ? color : DuoUi.COLOR_SURFACE);
@@ -360,28 +356,7 @@ public final class GamepadMod extends DuoMod {
 			canvas.drawCircle(x, y, faceButtonR, fill);
 			stroke.setColor(down ? Color.WHITE : color);
 			stroke.setAlpha(alpha);
-			stroke.setStrokeWidth(faceButtonR * 0.11f);
-			float s = faceButtonR * 0.42f;
-			switch (symbol) {
-			case 0:
-				path.reset();
-				path.moveTo(x, y - s);
-				path.lineTo(x + s * 0.95f, y + s * 0.65f);
-				path.lineTo(x - s * 0.95f, y + s * 0.65f);
-				path.close();
-				canvas.drawPath(path, stroke);
-				break;
-			case 1:
-				canvas.drawCircle(x, y, s * 0.9f, stroke);
-				break;
-			case 2:
-				canvas.drawLine(x - s * 0.8f, y - s * 0.8f, x + s * 0.8f, y + s * 0.8f, stroke);
-				canvas.drawLine(x - s * 0.8f, y + s * 0.8f, x + s * 0.8f, y - s * 0.8f, stroke);
-				break;
-			default:
-				canvas.drawRect(x - s * 0.75f, y - s * 0.75f, x + s * 0.75f, y + s * 0.75f, stroke);
-				break;
-			}
+			PspSymbols.draw(canvas, stroke, symbol, x, y, faceButtonR * 0.42f);
 		}
 	}
 }

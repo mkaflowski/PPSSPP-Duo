@@ -59,6 +59,14 @@ final class DuoSettingsView extends ScrollView {
 
 		header(ctx.getString(R.string.duo_settings_default_mod));
 		for (DuoMod mod : mods) {
+			// Game-specific mods can't be the default.
+			try {
+				if (mod.getPriority(DuoStatus.EMPTY) < 0) {
+					continue;
+				}
+			} catch (Throwable t) {
+				continue;
+			}
 			String title;
 			String desc;
 			try {
