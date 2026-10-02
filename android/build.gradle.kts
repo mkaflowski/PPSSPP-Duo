@@ -60,9 +60,10 @@ val gitVersionCode =
 // PPSSPP Duo version. Bump both for every release.
 val duoVersionName = "0.1.0"
 val duoVersionCode = 1
-// Upstream PPSSPP version we're based on. Falls back to the upstream commit in tagless clones.
-val duoUpstreamVersion = if (gitVersionCode > 0) gitVersionName else
-	providers.git("merge-base", "HEAD", "origin/master").take(8).ifEmpty { "unknown" }
+// Upstream PPSSPP version we're based on (Duo's own tags are "duo-v*", so they don't interfere).
+val duoUpstreamBase = providers.git("merge-base", "HEAD", "origin/master")
+val duoUpstreamVersion = providers.git("describe", "--tags", "--match", "v*", duoUpstreamBase.ifEmpty { "HEAD" })
+	.ifEmpty { duoUpstreamBase.take(8) }.ifEmpty { "unknown" }
 
 dependencies {
 	// 1.6.1 is the newest version we can use that won't complain about minSdk version,
