@@ -271,6 +271,7 @@ enum class SystemNotification {
 	PAD_STATE_CHANGED,
 	CONFIG_LOADED,
 	BEFORE_CONFIG_SAVE_ON_EXIT,
+	DUAL_SCREEN_CHANGED,  // PPSSPP Duo (Android): second screen settings changed.
 };
 
 // I guess it's not super great architecturally to centralize this, since it's not general - but same with a lot of

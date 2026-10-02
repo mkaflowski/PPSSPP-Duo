@@ -57,6 +57,13 @@ val gitVersionCode =
 		patch * 10_000 +
 		commitsSinceTag
 
+// PPSSPP Duo version. Bump both for every release.
+val duoVersionName = "0.1.0"
+val duoVersionCode = 1
+// Upstream PPSSPP version we're based on. Falls back to the upstream commit in tagless clones.
+val duoUpstreamVersion = if (gitVersionCode > 0) gitVersionName else
+	providers.git("merge-base", "HEAD", "origin/master").take(8).ifEmpty { "unknown" }
+
 dependencies {
 	// 1.6.1 is the newest version we can use that won't complain about minSdk version,
 	// and also doesn't collide kotlin versions with com.gladed.androidgitversion.
@@ -117,7 +124,8 @@ android {
 	defaultConfig {
 		applicationId = "org.ppsspp.ppsspp"
 		// Access the git version info via the extension
-		if (gitVersionName != "unknown") {
+		// gitVersionCode is 0 in clones without version tags (shallow clones), which AGP rejects.
+		if (gitVersionName != "unknown" && gitVersionCode > 0) {
 			println("INFO: Overriding Android Version Name, Code: $gitVersionName $gitVersionCode")
 			versionName = gitVersionName
 			versionCode = gitVersionCode
@@ -186,10 +194,38 @@ android {
 		create("legacy") {
 			res.directories.add("legacy/res")
 		}
+		// PPSSPP Duo: dual-screen build (AYN Thor and similar). Reuses the normal icons.
+		create("duo") {
+			res.directories.add("normal/res")
+			res.directories.add("duo/res")
+		}
 	}
 	productFlavors {
-		create("normal") {
+		create("duo") {
 			isDefault = true
+			// Separate package so it installs side by side with regular PPSSPP.
+			applicationId = "org.ppsspp.ppssppduo"
+			dimension = "variant"
+			// Duo has its own version, independent of the upstream git tags.
+			versionCode = duoVersionCode
+			versionName = "$duoVersionName (PPSSPP $duoUpstreamVersion)"
+			externalNativeBuild {
+				cmake {
+					arguments.addAll(listOf(
+						"-DANDROID=true",
+						"-DANDROID_PLATFORM=android-21",
+						"-DANDROID_TOOLCHAIN=clang",
+						"-DANDROID_CPP_FEATURES=",
+						"-DANDROID_STL=c++_shared"
+					))
+				}
+			}
+			ndk {
+				// Dual-screen handhelds are all arm64.
+				abiFilters.addAll(listOf("arm64-v8a"))
+			}
+		}
+		create("normal") {
 			applicationId = "org.ppsspp.ppsspp"
 			dimension = "variant"
 			externalNativeBuild {
@@ -281,6 +317,7 @@ androidComponents {
 	beforeVariants(selector().all()) { variantBuilder ->
 		// **FIXED**: Using simple "setOf"
 		val enabledVariants = setOf(
+			"duoDebug", "duoOptimized", "duoRelease",
 			"normalDebug", "normalOptimized", "normalRelease",
 			"goldDebug", "goldRelease",
 			"vrDebug", "vrOptimized", "vrRelease",

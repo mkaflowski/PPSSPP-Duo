@@ -1415,6 +1415,13 @@ void GameSettingsScreen::CreateSystemSettings(UI::ViewGroup *systemSettings) {
 		systemSettings->Add(new CheckBox(&g_Config.bSustainedPerformanceMode, sy->T("Sustained performance mode")))->OnClick.Handle(this, &GameSettingsScreen::OnSustainedPerformanceModeChange);
 	}
 
+#if PPSSPP_PLATFORM(ANDROID)
+	// PPSSPP Duo. The mods themselves are configured on the second screen.
+	systemSettings->Add(new CheckBox(&g_Config.bDualScreen, sy->T("Use second screen (dual-screen devices)")))->OnClick.Add([](UI::EventParams &e) {
+		System_Notify(SystemNotification::DUAL_SCREEN_CHANGED);
+	});
+#endif
+
 	systemSettings->Add(new Choice(sy->T("Restore Default Settings")))->OnClick.Handle(this, &GameSettingsScreen::OnRestoreDefaultSettings);
 
 	if (System_GetPropertyBool(SYSPROP_HAS_KEYBOARD))

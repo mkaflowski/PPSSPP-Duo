@@ -940,6 +940,7 @@ LOCAL_SRC_FILES := \
   $(SRC)/android/jni/app-android.cpp \
   $(SRC)/android/jni/AndroidAudio.cpp \
   $(SRC)/android/jni/OpenSLContext.cpp \
+  $(SRC)/android/jni/DuoBridge.cpp \
   $(SRC)/UI/ImDebugger/ImDebugger.cpp \
   $(SRC)/UI/ImDebugger/ImGe.cpp \
   $(SRC)/UI/ImDebugger/ImConsole.cpp \

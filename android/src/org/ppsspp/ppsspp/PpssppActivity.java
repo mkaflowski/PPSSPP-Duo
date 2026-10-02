@@ -122,6 +122,8 @@ public class PpssppActivity extends AppCompatActivity implements SensorEventList
 
 	private PowerSaveModeReceiver mPowerSaveModeReceiver = null;
 	private SizeManager sizeManager = null;
+	// PPSSPP Duo: second screen. Null if the native library failed to load.
+	private org.ppsspp.ppsspp.duo.DuoManager duoManager = null;
 	private static LocationHelper mLocationHelper;
 	private static InfraredHelper mInfraredHelper;
 	private static CameraHelper mCameraHelper;
@@ -700,6 +702,9 @@ public class PpssppActivity extends AppCompatActivity implements SensorEventList
 			mPowerSaveModeReceiver = new PowerSaveModeReceiver(this);
 		}
 
+		// Needs the config, so after Initialize().
+		duoManager = new org.ppsspp.ppsspp.duo.DuoManager(this);
+
 		// OK, config should be initialized, we can query for screen rotation.
 		updateScreenRotation("onCreate");
 		updateSustainedPerformanceMode();
@@ -967,6 +972,11 @@ public class PpssppActivity extends AppCompatActivity implements SensorEventList
 		super.onDestroy();
 		lifeCycle.onDestroy();
 
+		if (duoManager != null) {
+			duoManager.onDestroy();
+			duoManager = null;
+		}
+
 		if (javaGL) {
 			nativeRenderer = null;
 			mGLSurfaceView = null;
@@ -1012,18 +1022,27 @@ public class PpssppActivity extends AppCompatActivity implements SensorEventList
 	protected void onStart() {
 		super.onStart();
 		lifeCycle.onStart();
+		if (duoManager != null) {
+			duoManager.onStart();
+		}
 	}
 
 	@Override
 	protected void onStop() {
 		super.onStop();
 		lifeCycle.onStop();
+		if (duoManager != null) {
+			duoManager.onStop();
+		}
 	}
 
 	@Override
 	protected void onPause() {
 		super.onPause();
 		lifeCycle.onPause();
+		if (duoManager != null) {
+			duoManager.onPause();
+		}
 
 		InputManager inputManager = (InputManager)getSystemService(Context.INPUT_SERVICE);
 		inputManager.unregisterInputDeviceListener(inputDeviceListener);
@@ -1080,6 +1099,9 @@ public class PpssppActivity extends AppCompatActivity implements SensorEventList
 			startRenderLoopThread();
 		} else if (mGLSurfaceView != null) {
 			mGLSurfaceView.onResume();
+		}
+		if (duoManager != null) {
+			duoManager.onResume();
 		}
 		Log.i(TAG, "onResume end");
 	}
@@ -1681,6 +1703,11 @@ public class PpssppActivity extends AppCompatActivity implements SensorEventList
 			return true;
 		} else if (command.equals("audio_mode_changed")) {
 			updateAudioFocus(this.audioManager, this.audioFocusChangeListener);
+			return true;
+		} else if (command.equals("duo_config_changed")) {
+			if (duoManager != null) {
+				duoManager.onConfigChanged();
+			}
 			return true;
 		} else if (command.equals("recreate")) {
 			recreate();

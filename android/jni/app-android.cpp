@@ -105,6 +105,7 @@ struct JNIEnv {};
 #include "UI/GameInfoCache.h"
 
 #include "app-android.h"
+#include "DuoBridge.h"
 
 enum class EmuThreadState {
 	DISABLED,
@@ -580,6 +581,8 @@ static std::string QueryConfig(std::string_view query) {
 		return "true";
 	} else if (query == "audioMixWithOthers") {
 		return g_Config.bAudioMixWithOthers ? "1" : "0";
+	} else if (query == "dualScreen") {
+		return g_Config.bDualScreen ? "1" : "0";
 	} else {
 		return "";
 	}
@@ -958,6 +961,7 @@ extern "C" jboolean Java_org_ppsspp_ppsspp_NativeRenderer_displayInit(JNIEnv * e
 		// This is where we start the emuthread now - after InitFromRenderThread. This eliminates a race condition.
 		g_emuThread = EmuThread_Start(graphicsContext, new NativeApplication(), [](GraphicsContext *graphicsContext) {
 			NativeFrame(graphicsContext);
+			DuoBridge_OnFrame();
 			ProcessFrameCommands();
 			return true;
 		});
@@ -984,6 +988,7 @@ extern "C" jboolean Java_org_ppsspp_ppsspp_NativeRenderer_displayInit(JNIEnv * e
 
 		g_emuThread = EmuThread_Start(graphicsContext, new NativeApplication(), [](GraphicsContext *graphicsContext) {
 			NativeFrame(graphicsContext);
+			DuoBridge_OnFrame();
 			ProcessFrameCommands();
 			return true;
 		});
@@ -1052,6 +1057,9 @@ void System_Notify(SystemNotification notification) {
 		break;
 	case SystemNotification::AUDIO_MODE_CHANGED:
 		PushCommand("audio_mode_changed", "");
+		break;
+	case SystemNotification::DUAL_SCREEN_CHANGED:
+		PushCommand("duo_config_changed", "");
 		break;
 	default:
 		break;
@@ -1450,6 +1458,9 @@ extern "C" void JNICALL Java_org_ppsspp_ppsspp_NativeApp_sendMessageFromJava(JNI
 			INFO_LOG(Log::IO, "Decoding '%s' to '%s'", param.c_str(), prm.c_str());
 		}
 		System_PostUIMessage(UIMessage::REQUEST_GAME_BOOT, StripQuotes(prm));
+	} else if (msg == "duo_set_enabled") {
+		// From the second screen's settings page. Turned back on in System settings.
+		g_Config.bDualScreen = prm == "1";
 	} else {
 		ERROR_LOG(Log::System, "Got unexpected message from Java, ignoring: %s / %s", msg.c_str(), prm.c_str());
 	}
@@ -1709,6 +1720,7 @@ static void VulkanEmuThread(ANativeWindow *wnd, GraphicsContext *graphicsContext
 	renderer_inited = true;
 	RunMainLoop(graphicsContext, new NativeApplication(), [](GraphicsContext *graphicsContext) {
 		NativeFrame(graphicsContext);
+		DuoBridge_OnFrame();
 		ProcessFrameCommands();
 		return !exitRenderLoop;
 	});

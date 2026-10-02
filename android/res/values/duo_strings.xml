@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PPSSPP Duo: second screen UI. -->
+<resources>
+    <string name="duo_settings">Second screen settings</string>
+    <string name="duo_mod_failed">The mod \"%1$s\" failed to start.</string>
+
+    <string name="duo_settings_general">General</string>
+    <string name="duo_setting_remember_per_game">Remember the chosen mod for each game</string>
+    <string name="duo_setting_haptics">Haptic feedback</string>
+    <string name="duo_settings_default_mod">Default mod</string>
+    <string name="duo_settings_display">Display</string>
+    <string name="duo_setting_display_auto">Automatic</string>
+    <string name="duo_turn_off">Turn off the second screen</string>
+    <string name="duo_turn_off_hint">Turn it back on in PPSSPP: Settings, System, \"Use second screen (dual-screen devices)\".</string>
+
+    <string name="duo_mod_dashboard">Dashboard</string>
+    <string name="duo_mod_dashboard_desc">Game info, save states, speed and other quick actions</string>
+    <string name="duo_save_state">Save state</string>
+    <string name="duo_load_state">Load state</string>
+    <string name="duo_fast_forward">Fast forward</string>
+    <string name="duo_speed_toggle">Alt. speed</string>
+    <string name="duo_rewind">Rewind</string>
+    <string name="duo_pause_menu">Menu</string>
+    <string name="duo_freeze">Pause</string>
+    <string name="duo_screenshot">Screenshot</string>
+    <string name="duo_mute">Mute</string>
+    <string name="duo_no_game">No game running</string>
+    <string name="duo_no_game_hint">Pick a game on the main screen</string>
+    <string name="duo_state_paused">Paused</string>
+    <string name="duo_state_frozen">Halted</string>
+    <string name="duo_session_minutes">%1$d min</string>
+    <string name="duo_perf">%1$d FPS · %2$d%%</string>
+    <string name="duo_slot">Slot %1$d</string>
+    <string name="duo_slot_empty">empty</string>
+
+    <string name="duo_mod_gamepad">Gamepad</string>
+    <string name="duo_mod_gamepad_desc">Touch controls for all PSP buttons and the analog stick</string>
+    <string name="duo_mod_blank">Screen off</string>
+    <string name="duo_mod_blank_desc">Black screen. Tap the top edge to bring the tabs back</string>
+    <string name="duo_mod_diagnostics">Diagnostics</string>
+    <string name="duo_mod_diagnostics_desc">Emulator status, display info and a memory view, for mod developers</string>
+</resources>

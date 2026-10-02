@@ -927,6 +927,8 @@ if(ANDROID)
 		android/jni/AndroidAudio.h
 		android/jni/OpenSLContext.cpp
 		android/jni/OpenSLContext.h
+		android/jni/DuoBridge.cpp
+		android/jni/DuoBridge.h
 	)
 	# No target
 elseif(IOS AND NOT LIBRETRO)

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PPSSPP Duo: interfejs drugiego ekranu. -->
+<resources>
+    <string name="duo_settings">Ustawienia drugiego ekranu</string>
+    <string name="duo_mod_failed">Nie udało się uruchomić modu \"%1$s\".</string>
+
+    <string name="duo_settings_general">Ogólne</string>
+    <string name="duo_setting_remember_per_game">Zapamiętuj wybrany mod dla każdej gry</string>
+    <string name="duo_setting_haptics">Wibracje przy dotyku</string>
+    <string name="duo_settings_default_mod">Domyślny mod</string>
+    <string name="duo_settings_display">Ekran</string>
+    <string name="duo_setting_display_auto">Automatycznie</string>
+    <string name="duo_turn_off">Wyłącz drugi ekran</string>
+    <string name="duo_turn_off_hint">Włączysz go z powrotem w PPSSPP: Ustawienia, System, \"Use second screen (dual-screen devices)\".</string>
+
+    <string name="duo_mod_dashboard">Panel</string>
+    <string name="duo_mod_dashboard_desc">Informacje o grze, zapisy stanu, prędkość i inne szybkie akcje</string>
+    <string name="duo_save_state">Zapisz stan</string>
+    <string name="duo_load_state">Wczytaj stan</string>
+    <string name="duo_fast_forward">Przewijanie</string>
+    <string name="duo_speed_toggle">Alt. prędkość</string>
+    <string name="duo_rewind">Cofnij</string>
+    <string name="duo_pause_menu">Menu</string>
+    <string name="duo_freeze">Pauza</string>
+    <string name="duo_screenshot">Zrzut ekranu</string>
+    <string name="duo_mute">Wycisz</string>
+    <string name="duo_no_game">Żadna gra nie jest uruchomiona</string>
+    <string name="duo_no_game_hint">Wybierz grę na głównym ekranie</string>
+    <string name="duo_state_paused">Pauza</string>
+    <string name="duo_state_frozen">Zatrzymana</string>
+    <string name="duo_session_minutes">%1$d min</string>
+    <string name="duo_perf">%1$d FPS · %2$d%%</string>
+    <string name="duo_slot">Slot %1$d</string>
+    <string name="duo_slot_empty">pusty</string>
+
+    <string name="duo_mod_gamepad">Gamepad</string>
+    <string name="duo_mod_gamepad_desc">Dotykowe sterowanie: wszystkie przyciski PSP i gałka analogowa</string>
+    <string name="duo_mod_blank">Ekran wyłączony</string>
+    <string name="duo_mod_blank_desc">Czarny ekran. Dotknij górnej krawędzi, żeby wróciły zakładki</string>
+    <string name="duo_mod_diagnostics">Diagnostyka</string>
+    <string name="duo_mod_diagnostics_desc">Stan emulatora, informacje o ekranie i podgląd pamięci, dla twórców modów</string>
+</resources>

@@ -321,6 +321,8 @@ public:
 
 	bool bSustainedPerformanceMode;  // Android: Slows clocks down to avoid overheating/speed fluctuations.
 
+	bool bDualScreen;  // Android (PPSSPP Duo): show second-screen mods on a secondary display, if any.
+
 	bool bShowImDebugger;
 
 	int iFrameSkip;

@@ -1,0 +1,457 @@
+// Copyright (c) 2012- PPSSPP Project.
+
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, version 2.0 or later versions.
+
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License 2.0 for more details.
+
+// A copy of the GPL 2.0 should have been included with the program.
+// If not, see http://www.gnu.org/licenses/
+
+// Official git repository and contact information can be found at
+// https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
+
+#include "ppsspp_config.h"
+
+#if PPSSPP_PLATFORM(ANDROID)
+
+#include <jni.h>
+
+#include <algorithm>
+#include <atomic>
+#include <cstring>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <vector>
+
+#include "Common/Log.h"
+#include "Common/TimeUtil.h"
+#include "Common/Input/InputState.h"
+#include "Common/Data/Format/JSONWriter.h"
+#include "Core/Config.h"
+#include "Core/Core.h"
+#include "Core/ControlMapper.h"
+#include "Core/KeyMap.h"
+#include "Core/MemMap.h"
+#include "Core/SaveState.h"
+#include "Core/System.h"
+#include "Core/ELF/ParamSFO.h"
+#include "Core/HLE/sceCtrl.h"
+#include "Core/HW/Display.h"
+#include "UI/GameInfoCache.h"
+
+#include "android/jni/DuoBridge.h"
+
+namespace {
+
+// A press that waited this long (the render loop was stopped, for example) is dropped. Releases
+// are never dropped, so nothing can get stuck.
+constexpr double MAX_PRESS_AGE = 0.5;
+constexpr int MAX_WATCHES = 16;
+constexpr uint32_t MAX_WATCH_BYTES = 16 * 1024;
+// Save slot info comes from SaveState's cached listing; refreshed this often and when the slot changes.
+constexpr double SLOT_INFO_INTERVAL = 3.0;
+
+enum class CommandType {
+	PSP_BUTTON,
+	VIRT_KEY,
+};
+
+struct Command {
+	CommandType type;
+	uint32_t code;
+	bool down;
+	double time;
+};
+
+struct Watch {
+	uint32_t address = 0;
+	uint32_t size = 0;
+	bool valid = false;
+	std::vector<uint8_t> data;
+};
+
+struct Status {
+	std::string state = "menu";
+	bool stepping = false;
+	std::string gameId;
+	std::string title;
+	std::string path;
+	float vps = 0.0f;
+	float fps = 0.0f;
+	float actualFps = 0.0f;
+	bool fastForward = false;
+	int fpsLimit = 0;
+	int slot = 0;
+	int slotCount = 0;
+	bool slotUsed = false;
+	std::string slotDate;
+	int iconGeneration = 0;
+	uint32_t frame = 0;
+};
+
+std::atomic<bool> g_active{};
+std::atomic<bool> g_releaseAllRequested{};
+
+std::mutex g_commandLock;
+std::vector<Command> g_commands;
+
+std::mutex g_analogLock;
+bool g_analogDirty[2]{};
+float g_analog[2][2]{};
+
+std::mutex g_watchLock;
+std::vector<Watch> g_watches;
+
+std::mutex g_statusLock;
+Status g_status;
+std::string g_iconData;
+
+// Emu thread only.
+uint32_t g_heldButtons = 0;
+std::vector<uint32_t> g_heldVirtKeys;
+bool g_analogHeld[2]{};
+std::string g_lastGamePath;
+std::shared_ptr<GameInfo> g_iconInfo;
+double g_lastSlotCheck = 0.0;
+int g_lastSlotChecked = -1;
+bool g_slotUsed = false;
+std::string g_slotDate;
+std::vector<double> g_rescanTimes;
+uint32_t g_frameCounter = 0;
+
+void ReleaseEverything() {
+	if (g_heldButtons) {
+		g_controlMapper.PSPKey(DEVICE_ID_TOUCH, g_heldButtons, KeyInputFlags::UP);
+		g_heldButtons = 0;
+	}
+	for (uint32_t vkey : g_heldVirtKeys) {
+		g_controlMapper.PSPKey(DEVICE_ID_TOUCH, vkey, KeyInputFlags::UP);
+	}
+	g_heldVirtKeys.clear();
+	for (int stick = 0; stick < 2; stick++) {
+		if (g_analogHeld[stick]) {
+			__CtrlSetAnalogXY(stick, 0.0f, 0.0f);
+			g_analogHeld[stick] = false;
+		}
+	}
+}
+
+void ProcessCommands(double now) {
+	std::vector<Command> commands;
+	{
+		std::lock_guard<std::mutex> guard(g_commandLock);
+		commands.swap(g_commands);
+	}
+
+	if (g_releaseAllRequested.exchange(false)) {
+		ReleaseEverything();
+	}
+
+	for (const Command &cmd : commands) {
+		if (cmd.down && now - cmd.time > MAX_PRESS_AGE) {
+			continue;
+		}
+		const KeyInputFlags flags = cmd.down ? KeyInputFlags::DOWN : KeyInputFlags::UP;
+		if (cmd.type == CommandType::PSP_BUTTON) {
+			g_controlMapper.PSPKey(DEVICE_ID_TOUCH, cmd.code, flags);
+			if (cmd.down) {
+				g_heldButtons |= cmd.code;
+			} else {
+				g_heldButtons &= ~cmd.code;
+			}
+		} else {
+			g_controlMapper.PSPKey(DEVICE_ID_TOUCH, cmd.code, flags);
+			if (cmd.code == VIRTKEY_SAVE_STATE && cmd.down) {
+				// Saving is asynchronous and doesn't update SaveState's cached directory listing,
+				// so rescan a bit later (twice, in case the save is slow).
+				g_rescanTimes.push_back(now + 1.0);
+				g_rescanTimes.push_back(now + 4.0);
+			}
+			auto it = std::find(g_heldVirtKeys.begin(), g_heldVirtKeys.end(), cmd.code);
+			if (cmd.down && it == g_heldVirtKeys.end()) {
+				g_heldVirtKeys.push_back(cmd.code);
+			} else if (!cmd.down && it != g_heldVirtKeys.end()) {
+				g_heldVirtKeys.erase(it);
+			}
+		}
+	}
+}
+
+void ApplyAnalog(bool inGame) {
+	bool dirty[2];
+	float values[2][2];
+	{
+		std::lock_guard<std::mutex> guard(g_analogLock);
+		memcpy(dirty, g_analogDirty, sizeof(dirty));
+		memcpy(values, g_analog, sizeof(values));
+		g_analogDirty[0] = false;
+		g_analogDirty[1] = false;
+	}
+	for (int stick = 0; stick < 2; stick++) {
+		if (!dirty[stick]) {
+			continue;
+		}
+		const bool centered = values[stick][0] == 0.0f && values[stick][1] == 0.0f;
+		// Only write a centered stick if we moved it, so we don't fight a physical stick.
+		if (inGame && (!centered || g_analogHeld[stick])) {
+			__CtrlSetAnalogXY(stick, values[stick][0], values[stick][1]);
+		}
+		g_analogHeld[stick] = inGame && !centered;
+	}
+}
+
+const char *UIStateName(GlobalUIState state) {
+	switch (state) {
+	case UISTATE_MENU: return "menu";
+	case UISTATE_PAUSEMENU: return "paused";
+	case UISTATE_INGAME: return "ingame";
+	case UISTATE_EXIT: return "exit";
+	case UISTATE_EXCEPTION: return "exception";
+	default: return "unknown";
+	}
+}
+
+void UpdateIcon(const std::string &gamePath) {
+	if (gamePath != g_lastGamePath) {
+		g_lastGamePath = gamePath;
+		g_iconInfo.reset();
+		{
+			std::lock_guard<std::mutex> guard(g_statusLock);
+			g_iconData.clear();
+			g_status.iconGeneration++;
+		}
+		if (!gamePath.empty() && g_gameInfoCache) {
+			g_iconInfo = g_gameInfoCache->GetInfo(nullptr, Path(gamePath), GameInfoFlags::ICON);
+		}
+	}
+
+	if (g_iconInfo && g_iconInfo->icon.dataLoaded) {
+		std::string data;
+		{
+			std::lock_guard<std::mutex> guard(g_iconInfo->lock);
+			data = g_iconInfo->icon.data;
+		}
+		g_iconInfo.reset();
+		std::lock_guard<std::mutex> guard(g_statusLock);
+		g_iconData = std::move(data);
+		g_status.iconGeneration++;
+	}
+}
+
+void UpdateStatus(double now) {
+	const GlobalUIState uiState = GetUIState();
+	const bool running = PSP_IsInited() && (uiState == UISTATE_INGAME || uiState == UISTATE_PAUSEMENU);
+
+	std::string gamePath = running ? PSP_CoreParameter().fileToStart.ToString() : std::string();
+	UpdateIcon(gamePath);
+
+	Status s;
+	s.state = UIStateName(uiState);
+	s.stepping = Core_IsStepping();
+	s.path = gamePath;
+	if (running) {
+		s.gameId = g_paramSFO.GetDiscID();
+		s.title = g_paramSFO.GetValueString("TITLE");
+		__DisplayGetFPS(&s.vps, &s.fps, &s.actualFps);
+		s.fastForward = PSP_CoreParameter().fastForward;
+		s.fpsLimit = (int)PSP_CoreParameter().fpsLimit;
+	}
+	s.slot = g_Config.iCurrentStateSlot;
+	s.slotCount = g_Config.iSaveStateSlotCount;
+	s.frame = ++g_frameCounter;
+
+	bool rescan = false;
+	for (auto it = g_rescanTimes.begin(); it != g_rescanTimes.end();) {
+		if (now >= *it) {
+			rescan = true;
+			it = g_rescanTimes.erase(it);
+		} else {
+			++it;
+		}
+	}
+
+	// Done outside the lock, Rescan does file I/O (the UI thread reads the status).
+	const bool refreshSlot = running && (rescan || s.slot != g_lastSlotChecked || now - g_lastSlotCheck > SLOT_INFO_INTERVAL);
+	if (refreshSlot) {
+		std::string prefix = SaveState::GetGamePrefix(g_paramSFO);
+		if (rescan) {
+			SaveState::Rescan(prefix);
+		}
+		g_slotUsed = SaveState::HasSaveInSlot(prefix, s.slot);
+		g_slotDate = g_slotUsed ? SaveState::GetSlotDateAsString(prefix, s.slot) : std::string();
+		g_lastSlotChecked = s.slot;
+		g_lastSlotCheck = now;
+	} else if (!running) {
+		g_slotUsed = false;
+		g_slotDate.clear();
+		g_lastSlotChecked = -1;
+	}
+	s.slotUsed = g_slotUsed;
+	s.slotDate = g_slotDate;
+
+	std::lock_guard<std::mutex> guard(g_statusLock);
+	s.iconGeneration = g_status.iconGeneration;
+	g_status = std::move(s);
+}
+
+void UpdateWatches(bool running) {
+	std::lock_guard<std::mutex> guard(g_watchLock);
+	for (Watch &w : g_watches) {
+		w.valid = running && Memory::IsValidRange(w.address, w.size);
+		if (w.valid) {
+			memcpy(w.data.data(), Memory::GetPointerUnchecked(w.address), w.size);
+		}
+	}
+}
+
+}  // namespace
+
+void DuoBridge_OnFrame() {
+	if (!g_active) {
+		if (g_heldButtons || !g_heldVirtKeys.empty() || g_analogHeld[0] || g_analogHeld[1]) {
+			ReleaseEverything();
+		}
+		g_releaseAllRequested = false;
+		std::lock_guard<std::mutex> guard(g_commandLock);
+		g_commands.clear();
+		return;
+	}
+
+	const double now = time_now_d();
+	const GlobalUIState uiState = GetUIState();
+	const bool inGame = PSP_IsInited() && uiState == UISTATE_INGAME;
+	const bool running = PSP_IsInited() && (uiState == UISTATE_INGAME || uiState == UISTATE_PAUSEMENU);
+
+	ProcessCommands(now);
+	ApplyAnalog(inGame);
+	UpdateStatus(now);
+	UpdateWatches(running);
+}
+
+extern "C" {
+
+JNIEXPORT void JNICALL Java_org_ppsspp_ppsspp_duo_DuoNative_nativeSetActive(JNIEnv *, jclass, jboolean active) {
+	INFO_LOG(Log::System, "Duo: second screen %s", active ? "active" : "inactive");
+	g_active = active;
+}
+
+JNIEXPORT void JNICALL Java_org_ppsspp_ppsspp_duo_DuoNative_nativeButton(JNIEnv *, jclass, jint mask, jboolean down) {
+	std::lock_guard<std::mutex> guard(g_commandLock);
+	g_commands.push_back(Command{ CommandType::PSP_BUTTON, (uint32_t)mask, down != 0, time_now_d() });
+}
+
+JNIEXPORT void JNICALL Java_org_ppsspp_ppsspp_duo_DuoNative_nativeVirtKey(JNIEnv *, jclass, jint vkey, jboolean down) {
+	if ((uint32_t)vkey < VIRTKEY_FIRST || (uint32_t)vkey >= VIRTKEY_LAST) {
+		WARN_LOG(Log::System, "Duo: bad virtual key %08x", (uint32_t)vkey);
+		return;
+	}
+	std::lock_guard<std::mutex> guard(g_commandLock);
+	g_commands.push_back(Command{ CommandType::VIRT_KEY, (uint32_t)vkey, down != 0, time_now_d() });
+}
+
+JNIEXPORT void JNICALL Java_org_ppsspp_ppsspp_duo_DuoNative_nativeAnalog(JNIEnv *, jclass, jint stick, jfloat x, jfloat y) {
+	if (stick < 0 || stick > 1) {
+		return;
+	}
+	std::lock_guard<std::mutex> guard(g_analogLock);
+	g_analog[stick][0] = std::max(-1.0f, std::min(1.0f, (float)x));
+	g_analog[stick][1] = std::max(-1.0f, std::min(1.0f, (float)y));
+	g_analogDirty[stick] = true;
+}
+
+JNIEXPORT void JNICALL Java_org_ppsspp_ppsspp_duo_DuoNative_nativeReleaseAll(JNIEnv *, jclass) {
+	{
+		std::lock_guard<std::mutex> guard(g_commandLock);
+		g_commands.clear();
+	}
+	{
+		std::lock_guard<std::mutex> guard(g_analogLock);
+		g_analogDirty[0] = false;
+		g_analogDirty[1] = false;
+	}
+	g_releaseAllRequested = true;
+}
+
+JNIEXPORT jstring JNICALL Java_org_ppsspp_ppsspp_duo_DuoNative_nativeGetStatus(JNIEnv *env, jclass) {
+	json::JsonWriter w;
+	{
+		std::lock_guard<std::mutex> guard(g_statusLock);
+		const Status &s = g_status;
+		w.begin();
+		w.writeString("state", s.state);
+		w.writeBool("stepping", s.stepping);
+		w.writeString("gameId", s.gameId);
+		w.writeString("title", s.title);
+		w.writeString("path", s.path);
+		w.writeFloat("vps", s.vps);
+		w.writeFloat("fps", s.fps);
+		w.writeFloat("actualFps", s.actualFps);
+		w.writeBool("fastForward", s.fastForward);
+		w.writeInt("fpsLimit", s.fpsLimit);
+		w.writeInt("slot", s.slot);
+		w.writeInt("slotCount", s.slotCount);
+		w.writeBool("slotUsed", s.slotUsed);
+		w.writeString("slotDate", s.slotDate);
+		w.writeInt("iconGeneration", s.iconGeneration);
+		w.writeUint("frame", s.frame);
+		w.end();
+	}
+	return env->NewStringUTF(w.str().c_str());
+}
+
+JNIEXPORT jbyteArray JNICALL Java_org_ppsspp_ppsspp_duo_DuoNative_nativeGetIcon(JNIEnv *env, jclass) {
+	std::lock_guard<std::mutex> guard(g_statusLock);
+	if (g_iconData.empty()) {
+		return nullptr;
+	}
+	jbyteArray result = env->NewByteArray((jsize)g_iconData.size());
+	env->SetByteArrayRegion(result, 0, (jsize)g_iconData.size(), (const jbyte *)g_iconData.data());
+	return result;
+}
+
+JNIEXPORT jboolean JNICALL Java_org_ppsspp_ppsspp_duo_DuoNative_nativeSetWatches(JNIEnv *env, jclass, jintArray jaddresses, jintArray jsizes) {
+	std::vector<Watch> watches;
+	if (jaddresses && jsizes) {
+		jsize count = env->GetArrayLength(jaddresses);
+		if (count != env->GetArrayLength(jsizes) || count > MAX_WATCHES) {
+			return false;
+		}
+		std::vector<jint> addresses(count), sizes(count);
+		env->GetIntArrayRegion(jaddresses, 0, count, addresses.data());
+		env->GetIntArrayRegion(jsizes, 0, count, sizes.data());
+		for (jsize i = 0; i < count; i++) {
+			if (sizes[i] <= 0 || (uint32_t)sizes[i] > MAX_WATCH_BYTES) {
+				return false;
+			}
+			Watch w;
+			w.address = (uint32_t)addresses[i];
+			w.size = (uint32_t)sizes[i];
+			w.data.resize(w.size);
+			watches.push_back(std::move(w));
+		}
+	}
+	std::lock_guard<std::mutex> guard(g_watchLock);
+	g_watches = std::move(watches);
+	return true;
+}
+
+JNIEXPORT jbyteArray JNICALL Java_org_ppsspp_ppsspp_duo_DuoNative_nativeGetWatch(JNIEnv *env, jclass, jint index) {
+	std::lock_guard<std::mutex> guard(g_watchLock);
+	if (index < 0 || index >= (jint)g_watches.size() || !g_watches[index].valid) {
+		return nullptr;
+	}
+	const Watch &w = g_watches[index];
+	jbyteArray result = env->NewByteArray((jsize)w.size);
+	env->SetByteArrayRegion(result, 0, (jsize)w.size, (const jbyte *)w.data.data());
+	return result;
+}
+
+}  // extern "C"
+
+#endif  // PPSSPP_PLATFORM(ANDROID)
