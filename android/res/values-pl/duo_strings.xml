@@ -39,6 +39,8 @@
     <string name="duo_mod_blank_desc">Czarny ekran. Dotknij górnej krawędzi, żeby wróciły zakładki</string>
     <string name="duo_mod_patapon">Bębny</string>
     <string name="duo_mod_patapon_desc">Patapon: bębny i śpiewnik, który podąża za twoim rytmem</string>
+    <string name="duo_patapon_style_classic">Wygląd klasyczny</string>
+    <string name="duo_patapon_style_game">Wygląd z gry</string>
     <string name="duo_patapon_march">Marsz</string>
     <string name="duo_patapon_attack">Atak</string>
     <string name="duo_patapon_defend">Obrona</string>
@@ -65,6 +67,12 @@
     <string name="duo_lumines_deleted">Usunięte</string>
     <string name="duo_lumines_time">Czas</string>
     <string name="duo_lumines_fill">Plansza zapełniona w %1$d%%</string>
+    <string name="duo_mod_gt">Telemetria</string>
+    <string name="duo_mod_gt_desc">Gran Turismo: prędkościomierz, obrotomierz z czerwonym polem, pedały i mapa toru rysowana w trakcie jazdy</string>
+    <string name="duo_gt_waiting">Zacznij wyścig, żeby zobaczyć telemetrię</string>
+    <string name="duo_gt_map_hint">Mapa toru narysuje się w trakcie jazdy</string>
+    <string name="duo_gt_throttle">Gaz</string>
+    <string name="duo_gt_brake">Hamulec</string>
     <string name="duo_mod_diagnostics">Diagnostyka</string>
     <string name="duo_mod_diagnostics_desc">Stan emulatora, informacje o ekranie i podgląd pamięci, dla twórców modów</string>
 </resources>

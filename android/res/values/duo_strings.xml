@@ -39,6 +39,8 @@
     <string name="duo_mod_blank_desc">Black screen. Tap the top edge to bring the tabs back</string>
     <string name="duo_mod_patapon">Drums</string>
     <string name="duo_mod_patapon_desc">Patapon: drum pads and a song book that follows your drumming</string>
+    <string name="duo_patapon_style_classic">Classic look</string>
+    <string name="duo_patapon_style_game">Game look</string>
     <string name="duo_patapon_march">March</string>
     <string name="duo_patapon_attack">Attack</string>
     <string name="duo_patapon_defend">Defend</string>
@@ -65,6 +67,12 @@
     <string name="duo_lumines_deleted">Deleted</string>
     <string name="duo_lumines_time">Time</string>
     <string name="duo_lumines_fill">Board %1$d%% full</string>
+    <string name="duo_mod_gt">Telemetry</string>
+    <string name="duo_mod_gt_desc">Gran Turismo: speedometer, tachometer with the red line, pedals and a track map that draws itself as you drive</string>
+    <string name="duo_gt_waiting">Start a race to see the telemetry</string>
+    <string name="duo_gt_map_hint">The track map draws itself as you drive</string>
+    <string name="duo_gt_throttle">Throttle</string>
+    <string name="duo_gt_brake">Brake</string>
     <string name="duo_mod_diagnostics">Diagnostics</string>
     <string name="duo_mod_diagnostics_desc">Emulator status, display info and a memory view, for mod developers</string>
 </resources>

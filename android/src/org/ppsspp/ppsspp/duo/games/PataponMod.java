@@ -1,14 +1,20 @@
 package org.ppsspp.ppsspp.duo.games;
 
 import android.content.Context;
+import android.content.SharedPreferences;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.os.SystemClock;
 import android.util.SparseIntArray;
+import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
+import android.widget.FrameLayout;
+import android.widget.TextView;
 
 import org.ppsspp.ppsspp.R;
 import org.ppsspp.ppsspp.duo.DuoButtonPress;
@@ -18,6 +24,7 @@ import org.ppsspp.ppsspp.duo.DuoStatus;
 import org.ppsspp.ppsspp.duo.DuoUi;
 import org.ppsspp.ppsspp.duo.PspSymbols;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -76,7 +83,17 @@ public final class PataponMod extends DuoMod {
 	private static final long SONG_SHOWN_MS = 2000;
 	private static final long MISS_SHOWN_MS = 500;
 
+	private static final String PREFS = "duo_patapon";
+	private static final String PREF_GAME_ART = "game_art";
+	// Pad colors of the game's artwork, for the lit pads.
+	private static final int[] ART_COLOR = {0xFFE5262E, 0xFF4FA6DE, 0xFF41B97A, 0xFFF4C21B};
+
 	private DrumView view;
+	private TextView styleButton;
+	private boolean useArt = true;
+	// The game's drum artwork (kept across tab switches), null until loaded or if unavailable.
+	private Bitmap[] art;
+	private boolean artLoading;
 
 	@Override
 	public String getId() {
@@ -110,8 +127,54 @@ public final class PataponMod extends DuoMod {
 
 	@Override
 	public View onCreateView(DuoModContext host) {
-		view = new DrumView(host.getContext(), host);
-		return view;
+		Context ctx = host.getContext();
+		FrameLayout root = new FrameLayout(ctx);
+		view = new DrumView(ctx, host);
+		root.addView(view, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+		// Small switch between the game's drum artwork and the plain PSP-symbol pads.
+		SharedPreferences prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+		useArt = prefs.getBoolean(PREF_GAME_ART, true);
+		styleButton = DuoUi.button(ctx, "");
+		styleButton.setTextSize(13);
+		int padH = DuoUi.dp(ctx, 12);
+		styleButton.setPadding(padH, 0, padH, 0);
+		styleButton.setOnClickListener(v -> {
+			host.haptic(v);
+			useArt = !useArt;
+			prefs.edit().putBoolean(PREF_GAME_ART, useArt).apply();
+			applyStyle();
+		});
+		FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, DuoUi.dp(ctx, 36), Gravity.BOTTOM | Gravity.END);
+		int m = DuoUi.dp(ctx, 12);
+		lp.setMargins(m, m, m, m);
+		root.addView(styleButton, lp);
+		styleButton.setVisibility(View.GONE);
+
+		if (art == null && !artLoading) {
+			artLoading = true;
+			DuoStatus s = host.getStatus();
+			File dir = new File(ctx.getFilesDir(), "duo/patapon");
+			//noinspection ResultOfMethodCallIgnored
+			dir.mkdirs();
+			File cache = new File(dir, s.gameId + "_" + s.discVersion + "_drums.png");
+			PataponArt.load(host, cache, drums -> {
+				artLoading = false;
+				art = drums;
+				applyStyle();
+			});
+		}
+		applyStyle();
+		return root;
+	}
+
+	private void applyStyle() {
+		if (view == null || styleButton == null) {
+			return;
+		}
+		view.setArt(useArt ? art : null);
+		styleButton.setVisibility(art != null ? View.VISIBLE : View.GONE);
+		styleButton.setText(useArt ? R.string.duo_patapon_style_classic : R.string.duo_patapon_style_game);
 	}
 
 	@Override
@@ -130,6 +193,9 @@ public final class PataponMod extends DuoMod {
 	public void onDestroyView() {
 		view.releaseAll();
 		view = null;
+		styleButton = null;
+		// The host drops pending disc reads with the view; start over next time if unfinished.
+		artLoading = false;
 	}
 
 	private static final class DrumView extends View {
@@ -178,6 +244,15 @@ public final class PataponMod extends DuoMod {
 				gameRunning = running;
 				invalidate();
 			}
+		}
+
+		// The game's drum artwork in drum order, or null for the PSP-symbol pads.
+		private Bitmap[] art;
+		private final Paint artPaint = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
+
+		void setArt(Bitmap[] art) {
+			this.art = art;
+			invalidate();
 		}
 
 		@Override
@@ -439,6 +514,27 @@ public final class PataponMod extends DuoMod {
 			int color = PspSymbols.color(symbol);
 			boolean held = (heldMask & PspSymbols.buttonBit(symbol)) != 0;
 			boolean lit = held || padFlashUntil[drum] > now;
+
+			if (art != null && art[drum] != null) {
+				// The game's artwork on a dark pad; a hit lights the pad in the drum's color and
+				// pops the artwork a little.
+				fill.setStyle(Paint.Style.FILL);
+				fill.setColor(lit ? ART_COLOR[drum] : DuoUi.COLOR_SURFACE);
+				fill.setAlpha(gameRunning ? 255 : 110);
+				canvas.drawCircle(padX[drum], padY[drum], padR, fill);
+				if (lit) {
+					stroke.setStyle(Paint.Style.STROKE);
+					stroke.setStrokeWidth(padR * 0.06f);
+					stroke.setColor(0xFFFFFFFF);
+					canvas.drawCircle(padX[drum], padY[drum], padR * 0.97f, stroke);
+				}
+				float half = padR * (lit ? 0.98f : 0.9f);
+				rect.set(padX[drum] - half, padY[drum] - half, padX[drum] + half, padY[drum] + half);
+				artPaint.setAlpha(gameRunning ? 255 : 110);
+				canvas.drawBitmap(art[drum], null, rect, artPaint);
+				fill.setAlpha(255);
+				return;
+			}
 
 			fill.setStyle(Paint.Style.FILL);
 			fill.setColor(lit ? color : DuoUi.COLOR_SURFACE);
