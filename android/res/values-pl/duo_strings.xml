@@ -73,6 +73,9 @@
     <string name="duo_gt_map_hint">Mapa toru narysuje się w trakcie jazdy</string>
     <string name="duo_gt_throttle">Gaz</string>
     <string name="duo_gt_brake">Hamulec</string>
+    <string name="duo_gt_hide_map">Ukryj mapę</string>
+    <string name="duo_gt_show_map">Pokaż mapę</string>
+
     <string name="duo_mod_diagnostics">Diagnostyka</string>
     <string name="duo_mod_diagnostics_desc">Stan emulatora, informacje o ekranie i podgląd pamięci, dla twórców modów</string>
 </resources>

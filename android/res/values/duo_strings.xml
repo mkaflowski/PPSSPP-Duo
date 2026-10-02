@@ -73,6 +73,9 @@
     <string name="duo_gt_map_hint">The track map draws itself as you drive</string>
     <string name="duo_gt_throttle">Throttle</string>
     <string name="duo_gt_brake">Brake</string>
+    <string name="duo_gt_hide_map">Hide map</string>
+    <string name="duo_gt_show_map">Show map</string>
+
     <string name="duo_mod_diagnostics">Diagnostics</string>
     <string name="duo_mod_diagnostics_desc">Emulator status, display info and a memory view, for mod developers</string>
 </resources>

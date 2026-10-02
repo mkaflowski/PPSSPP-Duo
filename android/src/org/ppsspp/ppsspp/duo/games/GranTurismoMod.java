@@ -1,6 +1,7 @@
 package org.ppsspp.ppsspp.duo.games;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
@@ -8,7 +9,11 @@ import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.os.SystemClock;
 import android.util.Log;
+import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
+import android.widget.FrameLayout;
+import android.widget.TextView;
 
 import org.ppsspp.ppsspp.R;
 import org.ppsspp.ppsspp.duo.DuoMod;
@@ -53,8 +58,12 @@ public final class GranTurismoMod extends DuoMod {
 	private static final int W_HOLDER = 1;
 	private static final int W_TELEMETRY = 2;
 
+	private static final String PREFS = "duo_gran_turismo";
+	private static final String PREF_SHOW_MAP = "show_map";
+
 	private DuoModContext host;
 	private GtView view;
+	private TextView mapButton;
 
 	private int car, holder, telemetry;
 	private boolean searchingCar, searchingHolder;
@@ -97,10 +106,36 @@ public final class GranTurismoMod extends DuoMod {
 	@Override
 	public View onCreateView(DuoModContext host) {
 		this.host = host;
-		view = new GtView(host.getContext(), track);
+		Context ctx = host.getContext();
+		FrameLayout root = new FrameLayout(ctx);
+		view = new GtView(ctx, track);
+		root.addView(view, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 		car = holder = telemetry = 0;
 		searchingCar = searchingHolder = false;
-		return view;
+
+		// Hiding the map gives the gauges the whole screen.
+		SharedPreferences prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+		view.setShowMap(prefs.getBoolean(PREF_SHOW_MAP, true));
+		mapButton = DuoUi.button(ctx, "");
+		mapButton.setTextSize(13);
+		int padH = DuoUi.dp(ctx, 12);
+		mapButton.setPadding(padH, 0, padH, 0);
+		mapButton.setOnClickListener(v -> {
+			host.haptic(v);
+			view.setShowMap(!view.showMap);
+			prefs.edit().putBoolean(PREF_SHOW_MAP, view.showMap).apply();
+			updateMapButton();
+		});
+		FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, DuoUi.dp(ctx, GtView.BUTTON_H_DP), Gravity.BOTTOM | Gravity.END);
+		int m = DuoUi.dp(ctx, GtView.BUTTON_MARGIN_DP);
+		lp.setMargins(m, m, m, m);
+		root.addView(mapButton, lp);
+		updateMapButton();
+		return root;
+	}
+
+	private void updateMapButton() {
+		mapButton.setText(view.showMap ? R.string.duo_gt_hide_map : R.string.duo_gt_show_map);
 	}
 
 	private void watch() {
@@ -228,6 +263,7 @@ public final class GranTurismoMod extends DuoMod {
 	@Override
 	public void onDestroyView() {
 		view = null;
+		mapButton = null;
 		host = null;
 	}
 
@@ -279,7 +315,12 @@ public final class GranTurismoMod extends DuoMod {
 	}
 
 	private static final class GtView extends View {
+		// The map button sits in a row of its own at the bottom.
+		static final int BUTTON_H_DP = 36;
+		static final int BUTTON_MARGIN_DP = 12;
+
 		private final Track track;
+		boolean showMap = true;
 		private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
 		private final Path path = new Path();
 		private final RectF rect = new RectF();
@@ -298,6 +339,11 @@ public final class GranTurismoMod extends DuoMod {
 			this.track = track;
 			setBackgroundColor(DuoUi.COLOR_BACKGROUND);
 			paint.setTypeface(Typeface.DEFAULT_BOLD);
+		}
+
+		void setShowMap(boolean show) {
+			showMap = show;
+			invalidate();
 		}
 
 		void setLive(boolean l) {
@@ -345,7 +391,8 @@ public final class GranTurismoMod extends DuoMod {
 		protected void onDraw(Canvas canvas) {
 			Context ctx = getContext();
 			float w = getWidth(), h = getHeight();
-			float pad = DuoUi.dp(ctx, 28);
+			float pad = DuoUi.dp(ctx, 24);
+			float bottom = h - DuoUi.dp(ctx, BUTTON_H_DP + 2 * BUTTON_MARGIN_DP);
 			if (!live) {
 				paint.setStyle(Paint.Style.FILL);
 				paint.setTextAlign(Paint.Align.CENTER);
@@ -354,15 +401,22 @@ public final class GranTurismoMod extends DuoMod {
 				canvas.drawText(ctx.getString(R.string.duo_gt_waiting), w / 2, h / 2, paint);
 				return;
 			}
-			float split = w * 0.5f;
-			drawGauges(canvas, pad, pad, split - pad / 2, h - pad);
-			drawMap(canvas, split + pad / 2, pad, w - pad, h - pad);
+			if (showMap) {
+				float split = w * 0.5f;
+				drawGauges(canvas, pad, pad, split - pad / 2, bottom);
+				drawMap(canvas, split + pad / 2, pad, w - pad, bottom);
+			} else {
+				drawGauges(canvas, pad, pad, w - pad, bottom);
+			}
 		}
 
 		private void drawGauges(Canvas canvas, float l, float t, float r, float b) {
 			Context ctx = getContext();
 			float cx = (l + r) / 2;
-			float barsH = DuoUi.dp(ctx, 54);
+			// The pedal bars grow a bit with the gauge (when it has the whole screen).
+			float barH = Math.max(DuoUi.dp(ctx, 16), Math.min(DuoUi.dp(ctx, 24), (b - t) * 0.045f));
+			float barGap = barH * 0.6f;
+			float barsH = barH * 2 + barGap + DuoUi.dp(ctx, 18);
 			float radius = Math.min((r - l) / 2, (b - t - barsH) / 1.75f);
 			float cy = t + radius + DuoUi.dp(ctx, 6);
 
@@ -424,19 +478,21 @@ public final class GranTurismoMod extends DuoMod {
 				canvas.drawText(String.format(Locale.US, "%,d rpm", Math.round(rpm)), cx, cy + radius * 0.62f, paint);
 			}
 
-			// Pedals.
-			float barH = DuoUi.dp(ctx, 16);
-			float y = b - barsH + DuoUi.dp(ctx, 4);
-			bar(canvas, l, r, y, barH, throttle, DuoUi.COLOR_GOOD, ctx.getString(R.string.duo_gt_throttle));
-			bar(canvas, l, r, y + barH + DuoUi.dp(ctx, 10), barH, brake, 0xFFE04848, ctx.getString(R.string.duo_gt_brake));
+			// Pedals, no wider than the gauge (so they don't stretch across the whole screen).
+			float half = Math.min((r - l) / 2, radius * 1.3f);
+			float y = b - barH * 2 - barGap;
+			String throttleLabel = ctx.getString(R.string.duo_gt_throttle);
+			String brakeLabel = ctx.getString(R.string.duo_gt_brake);
+			paint.setTextSize(barH * 0.8f);
+			float labelW = Math.max(paint.measureText(throttleLabel), paint.measureText(brakeLabel)) + barH * 0.8f;
+			bar(canvas, cx - half, cx + half, y, barH, labelW, throttle, DuoUi.COLOR_GOOD, throttleLabel);
+			bar(canvas, cx - half, cx + half, y + barH + barGap, barH, labelW, brake, 0xFFE04848, brakeLabel);
 		}
 
-		private void bar(Canvas canvas, float l, float r, float y, float barH, float value, int color, String label) {
-			Context ctx = getContext();
-			float labelW = DuoUi.dp(ctx, 64);
+		private void bar(Canvas canvas, float l, float r, float y, float barH, float labelW, float value, int color, String label) {
 			paint.setStyle(Paint.Style.FILL);
 			paint.setTextAlign(Paint.Align.LEFT);
-			paint.setTextSize(DuoUi.dp(ctx, 13));
+			paint.setTextSize(barH * 0.8f);
 			paint.setColor(DuoUi.COLOR_TEXT_DIM);
 			canvas.drawText(label, l, y + barH * 0.85f, paint);
 			rect.set(l + labelW, y, r, y + barH);
