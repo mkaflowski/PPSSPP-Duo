@@ -18,6 +18,7 @@ import org.ppsspp.ppsspp.duo.DuoUi;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.ArrayList;
 import java.util.Locale;
 
 // Gran Turismo (PSP): speedometer, tachometer with the car's own red line, pedals, and a track map
@@ -449,6 +450,28 @@ public final class GranTurismoMod extends DuoMod {
 			}
 		}
 
+		// Centered text broken into lines at spaces to fit maxW, with the paint's current size.
+		private void drawWrapped(Canvas canvas, String text, float cx, float cy, float maxW) {
+			ArrayList<String> lines = new ArrayList<>();
+			String line = "";
+			for (String word : text.split(" ")) {
+				String next = line.isEmpty() ? word : line + " " + word;
+				if (!line.isEmpty() && paint.measureText(next) > maxW) {
+					lines.add(line);
+					line = word;
+				} else {
+					line = next;
+				}
+			}
+			lines.add(line);
+			float lineH = paint.getTextSize() * 1.3f;
+			float y = cy - lineH * (lines.size() - 1) / 2 - (paint.descent() + paint.ascent()) / 2;
+			for (String s : lines) {
+				canvas.drawText(s, cx, y, paint);
+				y += lineH;
+			}
+		}
+
 		private void drawMap(Canvas canvas, float l, float t, float r, float b) {
 			Context ctx = getContext();
 			rect.set(l, t, r, b);
@@ -460,7 +483,7 @@ public final class GranTurismoMod extends DuoMod {
 				paint.setTextAlign(Paint.Align.CENTER);
 				paint.setTextSize(DuoUi.dp(ctx, 14));
 				paint.setColor(DuoUi.COLOR_TEXT_DIM);
-				canvas.drawText(ctx.getString(R.string.duo_gt_map_hint), (l + r) / 2, (t + b) / 2, paint);
+				drawWrapped(canvas, ctx.getString(R.string.duo_gt_map_hint), (l + r) / 2, (t + b) / 2, r - l - DuoUi.dp(ctx, 32));
 				return;
 			}
 			float m = DuoUi.dp(ctx, 18);
