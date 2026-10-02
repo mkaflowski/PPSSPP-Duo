@@ -59,6 +59,13 @@ public final class DuoNative {
 	// (newly pressed button bits, time in ms). Only recorded in game. Null if none.
 	public static native int[] nativeGetButtonPresses();
 
+	// Asynchronous read of up to 1 MB from the game's own files ("disc0:/PSP_GAME/..."), done on the
+	// emu thread between frames. Returns a request id, or 0 if rejected.
+	public static native int nativeRequestGameFile(String path, int offset, int size);
+	// Null while pending, then the data (empty if the read failed). The request is gone afterwards.
+	public static native byte[] nativePollGameFile(int id);
+	public static native void nativeCancelGameFiles();
+
 	// PSP memory ranges to copy at the end of every frame. Max 16 ranges of 16 KB each.
 	// Pass nulls to clear. Returns false if the request was rejected.
 	public static native boolean nativeSetWatches(int[] addresses, int[] sizes);

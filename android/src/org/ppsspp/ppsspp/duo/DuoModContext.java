@@ -41,6 +41,16 @@ public interface DuoModContext {
 	// buffered (up to 64), so poll at least a few times per second if you need every press.
 	java.util.List<DuoButtonPress> pollButtonPresses();
 
+	interface GameFileCallback {
+		// data is null if the read failed. Called on the UI thread.
+		void onGameFile(byte[] data);
+	}
+
+	// Reads up to 1 MB from one of the game's files, e.g. "disc0:/PSP_GAME/USRDIR/DATA.BIN". One
+	// request is served per frame, so large scans take a while; cache the results. Pending requests
+	// are dropped when the mod is deactivated.
+	boolean readGameFile(String path, int offset, int size, GameFileCallback callback);
+
 	// Memory ranges copied every frame while this mod is active. Cleared when the mod is deactivated.
 	boolean setMemoryWatches(int[] addresses, int[] sizes);
 

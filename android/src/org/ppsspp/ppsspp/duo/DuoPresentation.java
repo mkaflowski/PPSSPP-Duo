@@ -50,6 +50,7 @@ final class DuoPresentation extends Presentation implements DuoModContext {
 	private FrameLayout content;
 	private View peekStrip;
 	private final Map<DuoMod, TextView> tabs = new HashMap<>();
+	private final Map<Integer, GameFileCallback> fileRequests = new HashMap<>();
 	private TextView settingsTab;
 
 	private DuoMod activeMod;
@@ -263,6 +264,8 @@ final class DuoPresentation extends Presentation implements DuoModContext {
 			onGameChanged(s);
 		}
 
+		pollGameFiles();
+
 		if (activeMod != null) {
 			try {
 				activeMod.onStatus(s);
@@ -403,6 +406,8 @@ final class DuoPresentation extends Presentation implements DuoModContext {
 		content.removeAllViews();
 		DuoNative.nativeReleaseAll();
 		DuoNative.nativeSetWatches(null, null);
+		DuoNative.nativeCancelGameFiles();
+		fileRequests.clear();
 		activeMod = null;
 		updateTabHighlight();
 	}
@@ -541,6 +546,36 @@ final class DuoPresentation extends Presentation implements DuoModContext {
 	@Override
 	public void setAnalog(int stick, float x, float y) {
 		DuoNative.nativeAnalog(stick, x, y);
+	}
+
+	@Override
+	public boolean readGameFile(String path, int offset, int size, GameFileCallback callback) {
+		int id = DuoNative.nativeRequestGameFile(path, offset, size);
+		if (id == 0) {
+			return false;
+		}
+		fileRequests.put(id, callback);
+		return true;
+	}
+
+	private void pollGameFiles() {
+		if (fileRequests.isEmpty()) {
+			return;
+		}
+		for (Integer id : new java.util.ArrayList<>(fileRequests.keySet())) {
+			byte[] data = DuoNative.nativePollGameFile(id);
+			if (data == null) {
+				continue;
+			}
+			GameFileCallback cb = fileRequests.remove(id);
+			if (cb != null && activeMod != null) {
+				try {
+					cb.onGameFile(data.length > 0 ? data : null);
+				} catch (Throwable t) {
+					reportModError(activeMod, t);
+				}
+			}
+		}
 	}
 
 	@Override

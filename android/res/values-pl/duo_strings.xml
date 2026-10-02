@@ -48,6 +48,11 @@
     <string name="duo_patapon_party">Impreza</string>
     <string name="duo_patapon_miracle">Cud</string>
 
+    <string name="duo_mod_gta_map">Mapa</string>
+    <string name="duo_mod_gta_map_desc">GTA: Liberty City Stories: mapa miasta z twoją pozycją, zbudowana z radaru gry</string>
+    <string name="duo_gta_building_map">Buduję mapę z danych gry…</string>
+    <string name="duo_gta_no_player">Pozycja gracza nie jest jeszcze obsługiwana w tej wersji gry</string>
+
     <string name="duo_mod_diagnostics">Diagnostyka</string>
     <string name="duo_mod_diagnostics_desc">Stan emulatora, informacje o ekranie i podgląd pamięci, dla twórców modów</string>
 </resources>

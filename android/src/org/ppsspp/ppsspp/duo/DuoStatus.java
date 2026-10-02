@@ -16,6 +16,8 @@ public final class DuoStatus {
 	// Emulation halted without a menu (pause-no-menu, debugger).
 	public final boolean stepping;
 	public final String gameId;
+	// DISC_VERSION from PARAM.SFO, e.g. "1.00". Memory layouts differ between versions.
+	public final String discVersion;
 	public final String title;
 	public final String path;
 	public final float vps;
@@ -34,6 +36,7 @@ public final class DuoStatus {
 		state = "menu";
 		stepping = false;
 		gameId = "";
+		discVersion = "";
 		title = "";
 		path = "";
 		vps = 0;
@@ -53,6 +56,7 @@ public final class DuoStatus {
 		state = o.optString("state", "menu");
 		stepping = o.optBoolean("stepping");
 		gameId = o.optString("gameId", "");
+		discVersion = o.optString("discVersion", "");
 		title = o.optString("title", "");
 		path = o.optString("path", "");
 		vps = (float)o.optDouble("vps", 0);

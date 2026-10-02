@@ -58,6 +58,7 @@ public final class MyMod extends DuoMod {
 | `setAnalog(stick, x, y)` | -1..1, positive y is up. |
 | `pollButtonPresses()` | Presses from any source (physical pad too), with timestamps. |
 | `setMemoryWatches(addr[], size[])` / `readMemoryWatch(i)` | Up to 16 ranges of 16 KB, copied every frame. Cleared when the mod is deactivated. |
+| `readGameFile(path, offset, size, cb)` | Up to 1 MB from `disc0:/...`, one request per frame, on the emu thread. |
 | `getStatus()` / `getGameIcon()` | Game ID, title, FPS, speed, save slot, pause state. |
 | `setTabBarVisible(false)` | Full-screen mods. A tap on the top edge shows the tabs for 4 s. |
 | `haptic(view)` | Respects the haptics setting. |
@@ -72,6 +73,11 @@ public final class MyMod extends DuoMod {
 - **Drums** (Patapon 1, UCES00995/UCUS98711/UCJS10077): drum pads and a song book that follows
   your drumming, physical buttons included. Next step: a beat indicator from the game's rhythm
   timer (needs its address, from a savestate taken during a mission).
+- **Map** (GTA: Liberty City Stories): the city map built at runtime from the game's 64 radar
+  textures in `GTA3PSPHR.IMG` (read through `readGameFile`, cached as a PNG in the app's files),
+  with the player's arrow and trail. Player matrix pointer: `0x08B35EF8` on ULES00151 v3.00
+  (RwMatrix: forward at +0x10, position at +0x30); other releases get the map without the arrow
+  until their pointer is added to `KNOWN_KEYS`.
 - **Screen off**: black, tab bar hidden.
 - **Diagnostics**: raw status, display info, memory dump.
 

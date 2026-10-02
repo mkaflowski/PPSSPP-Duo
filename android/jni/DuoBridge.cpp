@@ -41,6 +41,7 @@
 #include "Core/SaveState.h"
 #include "Core/System.h"
 #include "Core/ELF/ParamSFO.h"
+#include "Core/FileSystems/MetaFileSystem.h"
 #include "Core/HLE/sceCtrl.h"
 #include "Core/HW/Display.h"
 #include "UI/GameInfoCache.h"
@@ -80,6 +81,7 @@ struct Status {
 	std::string state = "menu";
 	bool stepping = false;
 	std::string gameId;
+	std::string discVersion;
 	std::string title;
 	std::string path;
 	float vps = 0.0f;
@@ -121,6 +123,23 @@ constexpr size_t MAX_BUTTON_PRESSES = 64;
 std::mutex g_pressLock;
 std::vector<ButtonPress> g_presses;
 uint32_t g_prevButtons = 0;  // emu thread only
+
+// Reads from the game's own files (disc0:/...), for mods that need game data such as map textures.
+// Done on the emu thread between frames, one request per frame, so no file handle outlives a frame
+// (savestates serialize open files) and the file system can't be torn down under us.
+constexpr uint32_t MAX_FILE_READ = 1024 * 1024;
+struct FileRequest {
+	int id;
+	std::string path;
+	uint32_t offset;
+	uint32_t size;
+	bool done = false;
+	bool ok = false;
+	std::vector<uint8_t> data;
+};
+std::mutex g_fileLock;
+std::vector<FileRequest> g_fileRequests;
+int g_nextFileId = 1;
 
 // Emu thread only.
 uint32_t g_heldButtons = 0;
@@ -267,6 +286,7 @@ void UpdateStatus(double now) {
 	s.path = gamePath;
 	if (running) {
 		s.gameId = g_paramSFO.GetDiscID();
+		s.discVersion = g_paramSFO.GetValueString("DISC_VERSION");
 		s.title = g_paramSFO.GetValueString("TITLE");
 		__DisplayGetFPS(&s.vps, &s.fps, &s.actualFps);
 		s.fastForward = PSP_CoreParameter().fastForward;
@@ -326,6 +346,47 @@ void UpdateButtonPresses(double now, bool running) {
 	g_presses.push_back(ButtonPress{ pressed, (int32_t)(now * 1000.0) });
 }
 
+void ProcessFileRequest(bool running) {
+	FileRequest req;
+	{
+		std::lock_guard<std::mutex> guard(g_fileLock);
+		auto it = std::find_if(g_fileRequests.begin(), g_fileRequests.end(), [](const FileRequest &r) { return !r.done; });
+		if (it == g_fileRequests.end()) {
+			return;
+		}
+		req.id = it->id;
+		req.path = it->path;
+		req.offset = it->offset;
+		req.size = it->size;
+	}
+
+	std::vector<uint8_t> data;
+	bool ok = false;
+	if (running) {
+		int handle = pspFileSystem.OpenFile(req.path, FILEACCESS_READ);
+		if (handle >= 0) {
+			data.resize(req.size);
+			pspFileSystem.SeekFile(handle, (s32)req.offset, FILEMOVE_BEGIN);
+			size_t got = pspFileSystem.ReadFile(handle, data.data(), req.size);
+			pspFileSystem.CloseFile(handle);
+			data.resize(got);
+			ok = true;
+		} else {
+			WARN_LOG(Log::System, "Duo: can't open game file %s", req.path.c_str());
+		}
+	}
+
+	std::lock_guard<std::mutex> guard(g_fileLock);
+	for (FileRequest &r : g_fileRequests) {
+		if (r.id == req.id) {
+			r.done = true;
+			r.ok = ok;
+			r.data = std::move(data);
+			break;
+		}
+	}
+}
+
 void UpdateWatches(bool running) {
 	std::lock_guard<std::mutex> guard(g_watchLock);
 	for (Watch &w : g_watches) {
@@ -359,6 +420,7 @@ void DuoBridge_OnFrame() {
 	UpdateStatus(now);
 	UpdateButtonPresses(now, inGame);
 	UpdateWatches(running);
+	ProcessFileRequest(running);
 }
 
 extern "C" {
@@ -414,6 +476,7 @@ JNIEXPORT jstring JNICALL Java_org_ppsspp_ppsspp_duo_DuoNative_nativeGetStatus(J
 		w.writeString("state", s.state);
 		w.writeBool("stepping", s.stepping);
 		w.writeString("gameId", s.gameId);
+		w.writeString("discVersion", s.discVersion);
 		w.writeString("title", s.title);
 		w.writeString("path", s.path);
 		w.writeFloat("vps", s.vps);
@@ -440,6 +503,57 @@ JNIEXPORT jbyteArray JNICALL Java_org_ppsspp_ppsspp_duo_DuoNative_nativeGetIcon(
 	jbyteArray result = env->NewByteArray((jsize)g_iconData.size());
 	env->SetByteArrayRegion(result, 0, (jsize)g_iconData.size(), (const jbyte *)g_iconData.data());
 	return result;
+}
+
+JNIEXPORT jint JNICALL Java_org_ppsspp_ppsspp_duo_DuoNative_nativeRequestGameFile(JNIEnv *env, jclass, jstring jpath, jint offset, jint size) {
+	if (!jpath || offset < 0 || size <= 0 || (uint32_t)size > MAX_FILE_READ) {
+		return 0;
+	}
+	const char *chars = env->GetStringUTFChars(jpath, nullptr);
+	std::string path = chars;
+	env->ReleaseStringUTFChars(jpath, chars);
+	// Only the game's own read-only files.
+	if (path.rfind("disc0:/", 0) != 0 && path.rfind("umd0:/", 0) != 0) {
+		return 0;
+	}
+	std::lock_guard<std::mutex> guard(g_fileLock);
+	if (g_fileRequests.size() >= 16) {
+		return 0;
+	}
+	FileRequest req;
+	req.id = g_nextFileId++;
+	req.path = path;
+	req.offset = (uint32_t)offset;
+	req.size = (uint32_t)size;
+	g_fileRequests.push_back(std::move(req));
+	return g_fileRequests.back().id;
+}
+
+// Null while pending. When done, returns the data (empty if the read failed) and forgets the request.
+JNIEXPORT jbyteArray JNICALL Java_org_ppsspp_ppsspp_duo_DuoNative_nativePollGameFile(JNIEnv *env, jclass, jint id) {
+	std::vector<uint8_t> data;
+	{
+		std::lock_guard<std::mutex> guard(g_fileLock);
+		auto it = std::find_if(g_fileRequests.begin(), g_fileRequests.end(), [id](const FileRequest &r) { return r.id == id; });
+		if (it == g_fileRequests.end()) {
+			return env->NewByteArray(0);
+		}
+		if (!it->done) {
+			return nullptr;
+		}
+		data = std::move(it->data);
+		g_fileRequests.erase(it);
+	}
+	jbyteArray result = env->NewByteArray((jsize)data.size());
+	if (!data.empty()) {
+		env->SetByteArrayRegion(result, 0, (jsize)data.size(), (const jbyte *)data.data());
+	}
+	return result;
+}
+
+JNIEXPORT void JNICALL Java_org_ppsspp_ppsspp_duo_DuoNative_nativeCancelGameFiles(JNIEnv *, jclass) {
+	std::lock_guard<std::mutex> guard(g_fileLock);
+	g_fileRequests.clear();
 }
 
 JNIEXPORT jintArray JNICALL Java_org_ppsspp_ppsspp_duo_DuoNative_nativeGetButtonPresses(JNIEnv *env, jclass) {
