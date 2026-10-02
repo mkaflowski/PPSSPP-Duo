@@ -194,9 +194,9 @@ android {
 		create("legacy") {
 			res.directories.add("legacy/res")
 		}
-		// PPSSPP Duo: dual-screen build (AYN Thor and similar). Reuses the normal icons.
+		// PPSSPP Duo: dual-screen build (AYN Thor and similar). Own name and icons (started as a
+		// copy of normal/res).
 		create("duo") {
-			res.directories.add("normal/res")
 			res.directories.add("duo/res")
 		}
 	}
