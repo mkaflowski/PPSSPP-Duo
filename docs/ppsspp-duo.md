@@ -3,7 +3,9 @@
 `duo` flavor of the Android port (`org.ppsspp.ppssppduo`, arm64 only) for dual-screen handhelds
 such as the AYN Thor (main panel 1920x1080, second panel "Screen-2" 1240x1080 with its own touch).
 
-Build: `gradlew :android:assembleDuoDebug` (JDK 17+ to start Gradle). Version: `duoVersionName` /
+Build: `gradlew :android:assembleDuoOptimized` (JDK 17+ to start Gradle) for playing. The
+`duoDebug` variant builds the native code without optimizations: fine for light games, but heavy
+ones run at about half speed (GTA LCS: 56% vs 100% in the same scene on the AYN Thor). Version: `duoVersionName` /
 `duoVersionCode` in `android/build.gradle.kts`.
 
 ## Architecture
