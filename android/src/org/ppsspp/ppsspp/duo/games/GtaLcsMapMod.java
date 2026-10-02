@@ -1,6 +1,7 @@
 package org.ppsspp.ppsspp.duo.games;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
@@ -31,12 +32,19 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.Locale;
 
-// GTA: Liberty City Stories: full city map with the player's position, heading and trail.
+// GTA: Liberty City Stories: city map with the player's position and heading, the trail driven so
+// far and the radar blips (mission targets and destinations).
 //
-// The map is built once from the game's radar textures (see GtaRadar) and cached as a PNG.
-// The player's matrix is found through a pointer in the game's static data; that address is
-// specific to each release, so the arrow only appears for the versions listed in PLAYER_POINTERS.
+// - The map is built once from the game's radar textures (see GtaRadar) and cached as a PNG.
+// - The game data is located with signature scans rather than fixed addresses, so other releases
+//   work without knowing their layout up front; the results are cached per game version. Found on
+//   ULES00151 v3.00:
+//   - player: pointer at 0x08B35EF8 to an RwMatrix (forward at +0x10, position at +0x30). It sits
+//     at +0x38 in a block of camera/player settings matched by PLAYER_PATTERN.
+//   - radar blips: 75 entries of 0x50 bytes at 0x08E4AAA0. The u32 at +0x34 is 0x0000FF00 in every
+//     entry, used and unused, which is what BLIP_PATTERN matches.
 public final class GtaLcsMapMod extends DuoMod {
 	public static final String ID = "gta_lcs_map";
 	private static final String TAG = "PPSSPPDuo";
@@ -45,21 +53,43 @@ public final class GtaLcsMapMod extends DuoMod {
 	private static final int READ_SIZE = 1024 * 1024;
 	// Textures are about 10 KB, so consecutive reads overlap by this much to catch the ones on a seam.
 	private static final int READ_OVERLAP = 32 * 1024;
+	// Where to start looking for the radar textures (ULES00151 v3.00); the whole file is scanned if
+	// they aren't all there.
+	private static final int RADAR_HINT_OFFSET = 0x02080000;
 
-	// gameId + discVersion -> {address of the player matrix pointer, IMG offset of the radar textures}.
-	// Found on ULES00151 3.00: the pointer leads to an RwMatrix (right, forward, up, position; 16 bytes
-	// each) that follows the player on foot and in vehicles.
-	private static final String[] KNOWN_KEYS = {"ULES00151 3.00"};
-	private static final int[][] KNOWN_VALUES = {{0x08B35EF8, 0x02080000}};
+	// The game's main module (loaded at the start of user memory) holds both structures.
+	private static final int SCAN_START = 0x08804000;
+	private static final int SCAN_END = 0x09800000;
 
-	// Liberty City Stories: Europe (tested), USA. The map works with any release (it's scanned from
-	// the disc); the player arrow only where the pointer is known.
-	private static final String[] GAME_IDS = {"ULES00151", "ULUS10041"};
+	private static final int[] PLAYER_PATTERN = {
+		0x0, 0x0, 0x1, 0x3fa66666, 0x0, 0x40000000, 0x3e4ccccd, 0x3f4ccccd, 0x3e8, 0x0, 0x3f800000, 0x190, 0x1};
+	private static final int PLAYER_POINTER_OFFSET = 0x38;
 
+	private static final int BLIP_COUNT = 75;
+	private static final int BLIP_SIZE = 0x50;
+	private static final int BLIP_MAGIC_OFFSET = 0x34;
+	private static final int BLIP_MAGIC = 0x0000FF00;
+
+	// Liberty City Stories: Europe (tested), USA, Japan. Unknown IDs are matched by title.
+	private static final String[] GAME_IDS = {"ULES00151", "ULUS10041", "ULJM05255"};
+
+	private static final String PREFS = "duo_gta_lcs";
+
+	// Watch slots.
+	private static final int W_POINTER = 0;
+	private static final int W_BLIPS = 1;
+	private static final int W_MATRIX = 2;
+
+	private DuoModContext host;
 	private MapView map;
 	private TextView info;
-	private DuoModContext host;
+	private TextView rotateButton;
 	private final Handler handler = new Handler(Looper.getMainLooper());
+
+	// Kept across tab switches (the mod object outlives its view).
+	private final Trail trail = new Trail();
+	private String trailGame = "";
+	private boolean rotateMap;
 
 	// Map extraction.
 	private GtaRadar radar;
@@ -67,8 +97,12 @@ public final class GtaLcsMapMod extends DuoMod {
 	private boolean fullScan;
 	private boolean scanning;
 
-	// Player tracking.
+	// Located game data, 0 = not (yet) found.
+	private String layoutKey = "";
 	private int pointerAddress;
+	private int blipAddress;
+	private boolean searching;
+	private long lastSearch;
 	private int matrixAddress;
 
 	@Override
@@ -86,14 +120,19 @@ public final class GtaLcsMapMod extends DuoMod {
 		return context.getString(R.string.duo_mod_gta_map_desc);
 	}
 
-	@Override
-	public int getPriority(DuoStatus status) {
+	static boolean isLcs(DuoStatus s) {
 		for (String id : GAME_IDS) {
-			if (id.equals(status.gameId)) {
-				return 100;
+			if (id.equals(s.gameId)) {
+				return true;
 			}
 		}
-		return -1;
+		String t = s.title.toLowerCase(Locale.ROOT);
+		return t.contains("liberty city stories") || s.title.contains("リバティー・シティー") || s.title.contains("リバティーシティー");
+	}
+
+	@Override
+	public int getPriority(DuoStatus status) {
+		return isLcs(status) ? 100 : -1;
 	}
 
 	@Override
@@ -101,22 +140,13 @@ public final class GtaLcsMapMod extends DuoMod {
 		return 66;
 	}
 
-	private static int[] known(DuoStatus s) {
-		String key = s.gameId + " " + s.discVersion;
-		for (int i = 0; i < KNOWN_KEYS.length; i++) {
-			if (KNOWN_KEYS[i].equals(key)) {
-				return KNOWN_VALUES[i];
-			}
-		}
-		return null;
-	}
-
 	@Override
 	public View onCreateView(DuoModContext host) {
 		this.host = host;
 		Context ctx = host.getContext();
 		FrameLayout root = new FrameLayout(ctx);
-		map = new MapView(ctx);
+		map = new MapView(ctx, trail);
+		map.setRotateMode(rotateMap);
 		root.addView(map, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
 		info = DuoUi.text(ctx, "", 14, DuoUi.COLOR_TEXT);
@@ -132,19 +162,28 @@ public final class GtaLcsMapMod extends DuoMod {
 		buttons.addView(mapButton(ctx, "+", v -> map.zoomBy(1.5f)));
 		buttons.addView(mapButton(ctx, "\u2212", v -> map.zoomBy(1 / 1.5f)));
 		buttons.addView(mapButton(ctx, "\u25CE", v -> map.setFollow(true)));
+		rotateButton = mapButton(ctx, "\u2B06", v -> {
+			rotateMap = !rotateMap;
+			v.setActivated(rotateMap);
+			map.setRotateMode(rotateMap);
+		});
+		rotateButton.setActivated(rotateMap);
+		rotateButton.setContentDescription(ctx.getString(R.string.duo_gta_rotate));
+		buttons.addView(rotateButton);
 		FrameLayout.LayoutParams btnLp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.END | Gravity.CENTER_VERTICAL);
 		btnLp.setMargins(pad, pad, pad, pad);
 		root.addView(buttons, btnLp);
 
 		radar = null;
 		scanning = false;
-		pointerAddress = 0;
+		searching = false;
 		matrixAddress = 0;
+		layoutKey = "";
 		loadMap(host.getStatus());
 		return root;
 	}
 
-	private View mapButton(Context ctx, String label, View.OnClickListener l) {
+	private TextView mapButton(Context ctx, String label, View.OnClickListener l) {
 		TextView b = DuoUi.button(ctx, label);
 		b.setTextSize(24);
 		b.setOnClickListener(v -> {
@@ -157,6 +196,8 @@ public final class GtaLcsMapMod extends DuoMod {
 		b.setLayoutParams(lp);
 		return b;
 	}
+
+	// Map.
 
 	private File cacheFile(DuoStatus s) {
 		File dir = new File(host.getContext().getFilesDir(), "duo/maps");
@@ -177,20 +218,19 @@ public final class GtaLcsMapMod extends DuoMod {
 				return;
 			}
 		}
-		// Start with the known location of the radar textures, if any, then fall back to the whole file.
 		radar = new GtaRadar();
-		int[] k = known(s);
-		fullScan = k == null;
-		scanOffset = k != null ? k[1] : 0;
+		fullScan = false;
+		scanOffset = RADAR_HINT_OFFSET;
 		scanning = true;
 		requestNextChunk();
 	}
 
 	private void requestNextChunk() {
+		if (host == null) {
+			return;
+		}
 		final int offset = scanOffset;
-		boolean ok = host.readGameFile(IMG_PATH, offset, READ_SIZE, data -> onChunk(offset, data));
-		if (!ok) {
-			// Queue full or no game; try again shortly.
+		if (!host.readGameFile(IMG_PATH, offset, READ_SIZE, data -> onChunk(offset, data))) {
 			handler.postDelayed(this::requestNextChunk, 500);
 		}
 	}
@@ -210,14 +250,13 @@ public final class GtaLcsMapMod extends DuoMod {
 			return;
 		}
 		if (!fullScan) {
-			// The known location didn't have them all (different data?), scan everything.
-			Log.w(TAG, "GTA map: only " + found + " radar tiles at the known offset, scanning the whole IMG");
+			Log.w(TAG, "GTA map: " + found + " radar tiles at the usual offset, scanning the whole IMG");
 			fullScan = true;
 			scanOffset = 0;
 		} else {
 			scanOffset = offset + READ_SIZE - READ_OVERLAP;
 		}
-		map.setProgress(fullScan ? scanOffset : -1);
+		map.setProgress(scanOffset);
 		requestNextChunk();
 	}
 
@@ -227,51 +266,131 @@ public final class GtaLcsMapMod extends DuoMod {
 		Log.i(TAG, "GTA map: built from " + radar.tileCount() + " radar tiles");
 		radar = null;
 		map.setMap(bmp);
-		File cache = cacheFile(host.getStatus());
-		try (FileOutputStream out = new FileOutputStream(cache)) {
+		try (FileOutputStream out = new FileOutputStream(cacheFile(host.getStatus()))) {
 			bmp.compress(Bitmap.CompressFormat.PNG, 100, out);
 		} catch (Exception e) {
 			Log.w(TAG, "GTA map: couldn't cache the map: " + e);
 		}
 	}
 
-	@Override
-	public void onStatus(DuoStatus s) {
-		if (map.mapBitmap == null && !scanning && s.hasGame()) {
-			loadMap(s);
-		}
-		trackPlayer(s);
+	// Locating the game data.
+
+	private SharedPreferences prefs() {
+		return host.getContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
 	}
 
-	private void trackPlayer(DuoStatus s) {
-		int[] k = known(s);
-		if (k == null || !s.hasGame()) {
-			info.setText(s.hasGame() ? host.getContext().getString(R.string.duo_gta_no_player) : "");
+	private void locate(DuoStatus s) {
+		String key = s.gameId + "_" + s.discVersion;
+		if (!key.equals(layoutKey)) {
+			layoutKey = key;
+			pointerAddress = prefs().getInt(key + ".player", 0);
+			blipAddress = prefs().getInt(key + ".blips", 0);
+			matrixAddress = 0;
+			applyWatches();
+		}
+		if (pointerAddress != 0 && blipAddress != 0) {
+			return;
+		}
+		// Not found yet, or the game hasn't set things up yet (title screen): retry now and then.
+		long now = android.os.SystemClock.uptimeMillis();
+		if (searching || now - lastSearch < 3000 || !s.isInGame()) {
+			return;
+		}
+		searching = true;
+		lastSearch = now;
+		final String searchKey = key;
+		if (pointerAddress == 0) {
+			int[] offsets = new int[PLAYER_PATTERN.length];
+			for (int i = 0; i < offsets.length; i++) {
+				offsets[i] = i * 4;
+			}
+			boolean queued = host.findMemory(SCAN_START, SCAN_END, offsets, PLAYER_PATTERN, addr -> {
+				if (addr != 0 && searchKey.equals(layoutKey)) {
+					pointerAddress = addr + PLAYER_POINTER_OFFSET;
+					prefs().edit().putInt(searchKey + ".player", pointerAddress).apply();
+					Log.i(TAG, "GTA map: player pointer at " + Integer.toHexString(pointerAddress));
+					applyWatches();
+				}
+				if (blipAddress != 0) {
+					searching = false;
+				}
+			});
+			if (!queued) {
+				searching = false;
+				return;
+			}
+		}
+		if (blipAddress == 0) {
+			int[] offsets = new int[BLIP_COUNT];
+			int[] values = new int[BLIP_COUNT];
+			for (int i = 0; i < BLIP_COUNT; i++) {
+				offsets[i] = i * BLIP_SIZE + BLIP_MAGIC_OFFSET;
+				values[i] = BLIP_MAGIC;
+			}
+			boolean queued = host.findMemory(SCAN_START, SCAN_END, offsets, values, addr -> {
+				if (addr != 0 && searchKey.equals(layoutKey)) {
+					blipAddress = addr;
+					prefs().edit().putInt(searchKey + ".blips", blipAddress).apply();
+					Log.i(TAG, "GTA map: radar blips at " + Integer.toHexString(blipAddress));
+					applyWatches();
+				}
+				searching = false;
+			});
+			if (!queued) {
+				searching = false;
+			}
+		}
+	}
+
+	private void applyWatches() {
+		int[] addresses = {pointerAddress != 0 ? pointerAddress : SCAN_START, blipAddress != 0 ? blipAddress : SCAN_START, matrixAddress != 0 ? matrixAddress : SCAN_START};
+		int[] sizes = {4, BLIP_COUNT * BLIP_SIZE, 0x40};
+		host.setMemoryWatches(addresses, sizes);
+	}
+
+	// Per-frame updates.
+
+	@Override
+	public void onStatus(DuoStatus s) {
+		if (!s.hasGame()) {
+			info.setText("");
 			map.setPlayer(false, 0, 0, 0, 0);
 			return;
 		}
-		if (pointerAddress != k[0]) {
-			pointerAddress = k[0];
-			matrixAddress = 0;
-			host.setMemoryWatches(new int[] {pointerAddress}, new int[] {4});
+		if (!s.path.equals(trailGame)) {
+			trailGame = s.path;
+			trail.clear();
+		}
+		if (map.mapBitmap == null && !scanning) {
+			loadMap(s);
+		}
+		locate(s);
+		updatePlayer();
+		updateBlips();
+	}
+
+	private void updatePlayer() {
+		if (pointerAddress == 0) {
+			info.setText(searching ? "" : host.getContext().getString(R.string.duo_gta_no_player));
+			map.setPlayer(false, 0, 0, 0, 0);
 			return;
 		}
-		byte[] ptr = host.readMemoryWatch(0);
+		byte[] ptr = host.readMemoryWatch(W_POINTER);
 		if (ptr == null) {
 			return;
 		}
 		int target = ByteBuffer.wrap(ptr).order(ByteOrder.LITTLE_ENDIAN).getInt();
-		boolean valid = target >= 0x08800000 && target < 0x0A000000 - 0x40;
-		if (!valid) {
+		if (target < 0x08800000 || target >= 0x0A000000 - 0x40) {
 			map.setPlayer(false, 0, 0, 0, 0);
 			return;
 		}
 		if (target != matrixAddress) {
+			// The new matrix shows up in the watch on the next frame.
 			matrixAddress = target;
-			host.setMemoryWatches(new int[] {pointerAddress, matrixAddress}, new int[] {4, 0x40});
+			applyWatches();
 			return;
 		}
-		byte[] m = host.readMemoryWatch(1);
+		byte[] m = host.readMemoryWatch(W_MATRIX);
 		if (m == null) {
 			return;
 		}
@@ -283,7 +402,56 @@ public final class GtaLcsMapMod extends DuoMod {
 			return;
 		}
 		map.setPlayer(true, x, y, fx, fy);
-		info.setText(String.format(java.util.Locale.US, "X %.0f  Y %.0f  Z %.0f", x, y, z));
+		info.setText(String.format(Locale.US, "X %.0f  Y %.0f  Z %.0f", x, y, z));
+	}
+
+	private void updateBlips() {
+		if (blipAddress == 0) {
+			map.setBlips(null, 0);
+			return;
+		}
+		byte[] data = host.readMemoryWatch(W_BLIPS);
+		if (data == null) {
+			map.setBlips(null, 0);
+			return;
+		}
+		ByteBuffer b = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN);
+		float[] out = map.blipBuffer(BLIP_COUNT);
+		int n = 0;
+		for (int i = 0; i < BLIP_COUNT; i++) {
+			int e = i * BLIP_SIZE;
+			int type = b.getInt(e + 4);
+			boolean inUse = data[e + 0x33] != 0;
+			int display = b.getShort(e + 0x3E) & 0xFFFF;
+			if (type == 0 || !inUse || display == 0) {
+				continue;
+			}
+			float x = b.getFloat(e + 0x0C), y = b.getFloat(e + 0x10);
+			if (Float.isNaN(x) || Float.isNaN(y) || Math.abs(x) > 5000 || Math.abs(y) > 5000 || (x == 0 && y == 0)) {
+				continue;
+			}
+			out[n * 4] = GtaRadar.worldToMapX(x);
+			out[n * 4 + 1] = GtaRadar.worldToMapY(y);
+			out[n * 4 + 2] = blipColor(b.getInt(e));
+			out[n * 4 + 3] = type;
+			n++;
+		}
+		map.setBlips(out, n);
+	}
+
+	// The game's blip color indices, or RGBA for custom colors.
+	private static int blipColor(int c) {
+		switch (c) {
+		case 0: return 0xFFE04848;  // red
+		case 1: return 0xFF5CD15C;  // green
+		case 2: return 0xFF5E8BF2;  // blue
+		case 3: return 0xFFF2F2F2;  // white
+		case 4: return 0xFFF5D547;  // yellow
+		case 5: return 0xFFD45CD8;  // purple
+		case 6: return 0xFF4CD9E6;  // cyan
+		default:
+			return 0xFF000000 | ((c >>> 24) << 16) | (((c >>> 16) & 0xFF) << 8) | ((c >>> 8) & 0xFF);
+		}
 	}
 
 	@Override
@@ -291,37 +459,79 @@ public final class GtaLcsMapMod extends DuoMod {
 		handler.removeCallbacksAndMessages(null);
 		radar = null;
 		scanning = false;
+		searching = false;
 		map = null;
 		info = null;
+		rotateButton = null;
 		host = null;
 	}
 
-	private static final class MapView extends View {
-		private static final int TRAIL_POINTS = 900;
-		private static final float TRAIL_MIN_STEP = 3.0f;  // map pixels
+	// The player's path, in map pixels. Survives tab switches.
+	static final class Trail {
+		static final int POINTS = 900;
+		static final float MIN_STEP = 3.0f;
+		final float[] xy = new float[POINTS * 2];
+		int start, count;
 
+		void clear() {
+			start = 0;
+			count = 0;
+		}
+
+		// Returns true if a point was added.
+		boolean add(float mx, float my) {
+			if (count > 0) {
+				int last = (start + count - 1) % POINTS;
+				float d = (float)Math.hypot(mx - xy[last * 2], my - xy[last * 2 + 1]);
+				if (d < MIN_STEP) {
+					return false;
+				}
+				if (d > 60) {
+					// Teleport (respawn, loading a save): start over.
+					clear();
+				}
+			}
+			int slot = (start + count) % POINTS;
+			xy[slot * 2] = mx;
+			xy[slot * 2 + 1] = my;
+			if (count < POINTS) {
+				count++;
+			} else {
+				start = (start + 1) % POINTS;
+			}
+			return true;
+		}
+	}
+
+	private static final class MapView extends View {
 		Bitmap mapBitmap;
+		private final Trail trail;
 		private final Matrix matrix = new Matrix();
 		private final Paint bitmapPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
 		private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-		private final Path arrow = new Path();
-		private final float[] trail = new float[TRAIL_POINTS * 2];
-		private int trailStart, trailCount;
+		private final Path path = new Path();
+		private final float[] pt = new float[2];
 
-		// View state: map pixel at the view center, and view pixels per map pixel.
+		// View state: map pixel at the view center, view pixels per map pixel, rotation in degrees.
 		private float centerX = GtaRadar.SIZE / 2f, centerY = GtaRadar.SIZE / 2f;
 		private float scale = 0;
+		private float rotation = 0;
+		private boolean rotateMode;
 		private boolean follow = true;
 		private int progress = -1;
 
 		private boolean hasPlayer;
-		private float playerX, playerY, dirX, dirY;
+		private float playerX, playerY, dirX = 0, dirY = -1;
+
+		private float[] blips = new float[0];
+		private int blipCount;
 
 		private final ScaleGestureDetector scaleDetector;
 		private final GestureDetector gestureDetector;
 
-		MapView(Context context) {
+		MapView(Context context, Trail trail) {
 			super(context);
+			this.trail = trail;
 			setBackgroundColor(GtaRadar.SEA_COLOR);
 			scaleDetector = new ScaleGestureDetector(context, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
 				@Override
@@ -334,9 +544,12 @@ public final class GtaLcsMapMod extends DuoMod {
 				@Override
 				public boolean onScroll(MotionEvent e1, MotionEvent e2, float dx, float dy) {
 					follow = false;
-					centerX += dx / scale;
-					centerY += dy / scale;
-					clampCenter();
+					// Screen deltas back into map space.
+					double r = Math.toRadians(-rotation);
+					float mdx = (float)(dx * Math.cos(r) - dy * Math.sin(r));
+					float mdy = (float)(dx * Math.sin(r) + dy * Math.cos(r));
+					centerX = Math.max(0, Math.min(GtaRadar.SIZE, centerX + mdx / scale));
+					centerY = Math.max(0, Math.min(GtaRadar.SIZE, centerY + mdy / scale));
 					invalidate();
 					return true;
 				}
@@ -369,9 +582,25 @@ public final class GtaLcsMapMod extends DuoMod {
 			invalidate();
 		}
 
+		// Heading up: the map turns so the player always points to the top of the screen.
+		void setRotateMode(boolean on) {
+			rotateMode = on;
+			if (on) {
+				setFollow(true);
+				rotation = targetRotation();
+			} else {
+				rotation = 0;
+			}
+			invalidate();
+		}
+
+		private float targetRotation() {
+			// Angle of the heading from screen-up, clockwise, in degrees; the map turns the other way.
+			return (float)-Math.toDegrees(Math.atan2(dirX, -dirY));
+		}
+
 		void zoomBy(float factor) {
 			scale = Math.max(minScale(), Math.min(scale * factor, minScale() * 16));
-			clampCenter();
 			invalidate();
 		}
 
@@ -379,61 +608,74 @@ public final class GtaLcsMapMod extends DuoMod {
 			return Math.min(getWidth(), getHeight()) / (float)GtaRadar.SIZE;
 		}
 
-		private void clampCenter() {
-			centerX = Math.max(0, Math.min(GtaRadar.SIZE, centerX));
-			centerY = Math.max(0, Math.min(GtaRadar.SIZE, centerY));
-		}
-
 		void setPlayer(boolean has, float x, float y, float fx, float fy) {
-			hasPlayer = has;
 			if (!has) {
-				invalidate();
+				if (hasPlayer) {
+					hasPlayer = false;
+					invalidate();
+				}
 				return;
 			}
 			float mx = GtaRadar.worldToMapX(x);
 			float my = GtaRadar.worldToMapY(y);
 			float len = (float)Math.hypot(fx, fy);
+			float ndx = dirX, ndy = dirY;
 			if (len > 0.01f) {
-				dirX = fx / len;
-				dirY = -fy / len;  // world north is up
+				ndx = fx / len;
+				ndy = -fy / len;  // world north is up
 			}
-			addTrail(mx, my);
+			boolean changed = !hasPlayer || Math.abs(mx - playerX) > 0.05f || Math.abs(my - playerY) > 0.05f
+				|| Math.abs(ndx - dirX) > 0.01f || Math.abs(ndy - dirY) > 0.01f;
+			hasPlayer = true;
+			dirX = ndx;
+			dirY = ndy;
+			trail.add(mx, my);
 			playerX = mx;
 			playerY = my;
 			if (follow) {
 				centerX = mx;
 				centerY = my;
 			}
-			invalidate();
-		}
-
-		private void addTrail(float mx, float my) {
-			if (trailCount > 0) {
-				int last = (trailStart + trailCount - 1) % TRAIL_POINTS;
-				float lx = trail[last * 2], ly = trail[last * 2 + 1];
-				float d = (float)Math.hypot(mx - lx, my - ly);
-				if (d < TRAIL_MIN_STEP) {
-					return;
-				}
-				if (d > 60) {
-					// Teleport (respawn, loading a save): start over.
-					trailCount = 0;
+			if (rotateMode) {
+				// Ease towards the heading so the map doesn't jitter.
+				float target = targetRotation();
+				float diff = ((target - rotation) % 360 + 540) % 360 - 180;
+				if (Math.abs(diff) > 0.2f) {
+					rotation += diff * 0.35f;
+					changed = true;
 				}
 			}
-			int slot = (trailStart + trailCount) % TRAIL_POINTS;
-			trail[slot * 2] = mx;
-			trail[slot * 2 + 1] = my;
-			if (trailCount < TRAIL_POINTS) {
-				trailCount++;
-			} else {
-				trailStart = (trailStart + 1) % TRAIL_POINTS;
+			// Only redraw when something moved, to save power while standing still.
+			if (changed) {
+				invalidate();
+			}
+		}
+
+		float[] blipBuffer(int max) {
+			if (blips.length < max * 4) {
+				blips = new float[max * 4];
+			}
+			return blips;
+		}
+
+		private float blipChecksum;
+
+		void setBlips(float[] data, int count) {
+			int n = data == null ? 0 : count;
+			float sum = 0;
+			for (int i = 0; i < n * 4; i++) {
+				sum = sum * 31 + blips[i];
+			}
+			if (n != blipCount || sum != blipChecksum) {
+				blipCount = n;
+				blipChecksum = sum;
+				invalidate();
 			}
 		}
 
 		@Override
 		protected void onSizeChanged(int w, int h, int oldw, int oldh) {
 			if (scale == 0) {
-				// Start zoomed in on the player's surroundings.
 				scale = minScale() * 4;
 			}
 			scale = Math.max(scale, minScale());
@@ -446,16 +688,24 @@ public final class GtaLcsMapMod extends DuoMod {
 			return true;
 		}
 
+		private void toScreen(float mx, float my) {
+			pt[0] = mx;
+			pt[1] = my;
+			matrix.mapPoints(pt);
+		}
+
 		@Override
 		protected void onDraw(Canvas canvas) {
 			float w = getWidth(), h = getHeight();
+			Context ctx = getContext();
 			if (mapBitmap == null) {
+				paint.setStyle(Paint.Style.FILL);
 				paint.setColor(DuoUi.COLOR_TEXT);
 				paint.setTextAlign(Paint.Align.CENTER);
-				paint.setTextSize(DuoUi.dp(getContext(), 20));
-				String text = getContext().getString(R.string.duo_gta_building_map);
+				paint.setTextSize(DuoUi.dp(ctx, 20));
+				String text = ctx.getString(R.string.duo_gta_building_map);
 				if (progress >= 0) {
-					text += String.format(java.util.Locale.US, " (%d MB)", progress >> 20);
+					text += String.format(Locale.US, " (%d MB)", progress >> 20);
 				}
 				canvas.drawText(text, w / 2, h / 2, paint);
 				return;
@@ -463,54 +713,121 @@ public final class GtaLcsMapMod extends DuoMod {
 			matrix.reset();
 			matrix.postTranslate(-centerX, -centerY);
 			matrix.postScale(scale, scale);
+			matrix.postRotate(rotation);
 			matrix.postTranslate(w / 2, h / 2);
 			canvas.drawBitmap(mapBitmap, matrix, bitmapPaint);
 
 			// Trail.
 			paint.setStyle(Paint.Style.STROKE);
 			paint.setStrokeCap(Paint.Cap.ROUND);
-			paint.setStrokeWidth(DuoUi.dp(getContext(), 3));
+			paint.setStrokeJoin(Paint.Join.ROUND);
+			paint.setStrokeWidth(DuoUi.dp(ctx, 3));
 			paint.setColor(0xB0FFC940);
-			float px = 0, py = 0;
-			for (int i = 0; i < trailCount; i++) {
-				int slot = (trailStart + i) % TRAIL_POINTS;
-				float sx = (trail[slot * 2] - centerX) * scale + w / 2;
-				float sy = (trail[slot * 2 + 1] - centerY) * scale + h / 2;
-				if (i > 0) {
-					canvas.drawLine(px, py, sx, sy, paint);
+			path.reset();
+			for (int i = 0; i < trail.count; i++) {
+				int slot = (trail.start + i) % Trail.POINTS;
+				toScreen(trail.xy[slot * 2], trail.xy[slot * 2 + 1]);
+				if (i == 0) {
+					path.moveTo(pt[0], pt[1]);
+				} else {
+					path.lineTo(pt[0], pt[1]);
 				}
-				px = sx;
-				py = sy;
 			}
+			canvas.drawPath(path, paint);
+
+			drawBlips(canvas, w, h);
 
 			if (hasPlayer) {
-				float sx = (playerX - centerX) * scale + w / 2;
-				float sy = (playerY - centerY) * scale + h / 2;
-				float r = DuoUi.dp(getContext(), 14);
-				// Arrow pointing along (dirX, dirY).
-				float nx = -dirY, ny = dirX;
-				arrow.reset();
-				arrow.moveTo(sx + dirX * r * 1.3f, sy + dirY * r * 1.3f);
-				arrow.lineTo(sx - dirX * r * 0.8f + nx * r * 0.9f, sy - dirY * r * 0.8f + ny * r * 0.9f);
-				arrow.lineTo(sx - dirX * r * 0.35f, sy - dirY * r * 0.35f);
-				arrow.lineTo(sx - dirX * r * 0.8f - nx * r * 0.9f, sy - dirY * r * 0.8f - ny * r * 0.9f);
-				arrow.close();
-				paint.setStyle(Paint.Style.FILL);
-				paint.setColor(0xFFFFFFFF);
-				canvas.drawPath(arrow, paint);
-				paint.setStyle(Paint.Style.STROKE);
-				paint.setStrokeWidth(DuoUi.dp(getContext(), 2.5f));
-				paint.setColor(0xFFE0402A);
-				canvas.drawPath(arrow, paint);
+				toScreen(playerX, playerY);
+				drawArrow(canvas, pt[0], pt[1]);
 			}
+			drawNorth(canvas, w, h);
+		}
 
-			// North marker.
+		private void drawBlips(Canvas canvas, float w, float h) {
+			float r = DuoUi.dp(getContext(), 9);
+			float margin = DuoUi.dp(getContext(), 18);
+			for (int i = 0; i < blipCount; i++) {
+				toScreen(blips[i * 4], blips[i * 4 + 1]);
+				float sx = pt[0], sy = pt[1];
+				int color = (int)blips[i * 4 + 2];
+				boolean coord = blips[i * 4 + 3] == 4;
+				boolean outside = sx < margin || sy < margin || sx > w - margin || sy > h - margin;
+				if (outside) {
+					// Clamp to the edge and point at it, like the in-game radar.
+					float cx = w / 2, cy = h / 2;
+					float dx = sx - cx, dy = sy - cy;
+					float t = Math.min(Math.abs((w / 2 - margin) / (dx == 0 ? 1e-3f : dx)), Math.abs((h / 2 - margin) / (dy == 0 ? 1e-3f : dy)));
+					float ex = cx + dx * t, ey = cy + dy * t;
+					float len = (float)Math.hypot(dx, dy);
+					float ux = dx / len, uy = dy / len;
+					path.reset();
+					path.moveTo(ex + ux * r * 1.2f, ey + uy * r * 1.2f);
+					path.lineTo(ex - ux * r * 0.6f - uy * r, ey - uy * r * 0.6f + ux * r);
+					path.lineTo(ex - ux * r * 0.6f + uy * r, ey - uy * r * 0.6f - ux * r);
+					path.close();
+					paint.setStyle(Paint.Style.FILL);
+					paint.setColor(color);
+					canvas.drawPath(path, paint);
+					paint.setStyle(Paint.Style.STROKE);
+					paint.setStrokeWidth(DuoUi.dp(getContext(), 1.5f));
+					paint.setColor(0xFF101010);
+					canvas.drawPath(path, paint);
+					continue;
+				}
+				paint.setStyle(Paint.Style.FILL);
+				paint.setColor(color);
+				canvas.drawCircle(sx, sy, r, paint);
+				paint.setStyle(Paint.Style.STROKE);
+				paint.setStrokeWidth(DuoUi.dp(getContext(), 2));
+				paint.setColor(0xFF101010);
+				canvas.drawCircle(sx, sy, r, paint);
+				if (coord) {
+					// Destination: a ring around the dot.
+					paint.setColor(color);
+					paint.setStrokeWidth(DuoUi.dp(getContext(), 2.5f));
+					canvas.drawCircle(sx, sy, r * 1.9f, paint);
+				}
+			}
+		}
+
+		private void drawArrow(Canvas canvas, float sx, float sy) {
+			float r = DuoUi.dp(getContext(), 14);
+			// Heading on screen: the map direction turned by the view rotation.
+			double rad = Math.toRadians(rotation);
+			float ax = (float)(dirX * Math.cos(rad) - dirY * Math.sin(rad));
+			float ay = (float)(dirX * Math.sin(rad) + dirY * Math.cos(rad));
+			float nx = -ay, ny = ax;
+			path.reset();
+			path.moveTo(sx + ax * r * 1.3f, sy + ay * r * 1.3f);
+			path.lineTo(sx - ax * r * 0.8f + nx * r * 0.9f, sy - ay * r * 0.8f + ny * r * 0.9f);
+			path.lineTo(sx - ax * r * 0.35f, sy - ay * r * 0.35f);
+			path.lineTo(sx - ax * r * 0.8f - nx * r * 0.9f, sy - ay * r * 0.8f - ny * r * 0.9f);
+			path.close();
 			paint.setStyle(Paint.Style.FILL);
+			paint.setColor(0xFFFFFFFF);
+			canvas.drawPath(path, paint);
+			paint.setStyle(Paint.Style.STROKE);
+			paint.setStrokeWidth(DuoUi.dp(getContext(), 2.5f));
+			paint.setColor(0xFFE0402A);
+			canvas.drawPath(path, paint);
+		}
+
+		// "N" on a circle around the center, in the direction of north.
+		private void drawNorth(Canvas canvas, float w, float h) {
+			Context ctx = getContext();
+			double rad = Math.toRadians(rotation);
+			float ux = (float)Math.sin(rad), uy = (float)-Math.cos(rad);
+			float radius = Math.min(w, h) / 2 - DuoUi.dp(ctx, 26);
+			float x = w / 2 + ux * radius, y = h / 2 + uy * radius;
+			paint.setStyle(Paint.Style.FILL);
+			paint.setColor(0xC0141A22);
+			canvas.drawCircle(x, y, DuoUi.dp(ctx, 15), paint);
 			paint.setTypeface(Typeface.DEFAULT_BOLD);
 			paint.setTextAlign(Paint.Align.CENTER);
-			paint.setTextSize(DuoUi.dp(getContext(), 16));
-			paint.setColor(DuoUi.COLOR_TEXT);
-			canvas.drawText("N", w / 2, DuoUi.dp(getContext(), 24), paint);
+			paint.setTextSize(DuoUi.dp(ctx, 16));
+			paint.setColor(rotateMode ? 0xFFE0402A : DuoUi.COLOR_TEXT);
+			canvas.drawText("N", x, y - (paint.descent() + paint.ascent()) / 2, paint);
 		}
 	}
 }

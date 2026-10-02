@@ -53,6 +53,8 @@
     <string name="duo_gta_building_map">Building the map from the game…</string>
     <string name="duo_gta_no_player">Your position isn\'t supported for this version of the game yet</string>
 
+    <string name="duo_gta_rotate">Turn the map with the player</string>
+
     <string name="duo_mod_diagnostics">Diagnostics</string>
     <string name="duo_mod_diagnostics_desc">Emulator status, display info and a memory view, for mod developers</string>
 </resources>

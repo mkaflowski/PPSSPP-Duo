@@ -51,6 +51,7 @@ final class DuoPresentation extends Presentation implements DuoModContext {
 	private View peekStrip;
 	private final Map<DuoMod, TextView> tabs = new HashMap<>();
 	private final Map<Integer, GameFileCallback> fileRequests = new HashMap<>();
+	private final Map<Integer, FindCallback> findRequests = new HashMap<>();
 	private TextView settingsTab;
 
 	private DuoMod activeMod;
@@ -408,6 +409,7 @@ final class DuoPresentation extends Presentation implements DuoModContext {
 		DuoNative.nativeSetWatches(null, null);
 		DuoNative.nativeCancelGameFiles();
 		fileRequests.clear();
+		findRequests.clear();
 		activeMod = null;
 		updateTabHighlight();
 	}
@@ -558,7 +560,38 @@ final class DuoPresentation extends Presentation implements DuoModContext {
 		return true;
 	}
 
+	@Override
+	public boolean findMemory(int start, int end, int[] offsets, int[] values, FindCallback callback) {
+		int id = DuoNative.nativeRequestFind(start, end, offsets, values);
+		if (id == 0) {
+			return false;
+		}
+		findRequests.put(id, callback);
+		return true;
+	}
+
+	private void pollFinds() {
+		if (findRequests.isEmpty()) {
+			return;
+		}
+		for (Integer id : new java.util.ArrayList<>(findRequests.keySet())) {
+			long result = DuoNative.nativePollFind(id);
+			if (result < 0) {
+				continue;
+			}
+			FindCallback cb = findRequests.remove(id);
+			if (cb != null && activeMod != null) {
+				try {
+					cb.onFound((int)result);
+				} catch (Throwable t) {
+					reportModError(activeMod, t);
+				}
+			}
+		}
+	}
+
 	private void pollGameFiles() {
+		pollFinds();
 		if (fileRequests.isEmpty()) {
 			return;
 		}

@@ -95,8 +95,11 @@ public final class PataponMod extends DuoMod {
 
 	@Override
 	public int getPriority(DuoStatus status) {
-		// Picked automatically for Patapon, hidden otherwise.
-		return GAME_IDS.contains(status.gameId) ? 100 : -1;
+		// Picked automatically for Patapon, hidden otherwise. Releases not in the list are recognized
+		// by title (the sequels are "PATAPON 2" / "パタポン2", so the exact match leaves them out).
+		String title = status.title.trim();
+		boolean patapon = GAME_IDS.contains(status.gameId) || title.equalsIgnoreCase("PATAPON") || title.equals("パタポン");
+		return patapon ? 100 : -1;
 	}
 
 	@Override

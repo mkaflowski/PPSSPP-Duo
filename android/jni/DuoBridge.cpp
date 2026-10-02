@@ -141,6 +141,21 @@ std::mutex g_fileLock;
 std::vector<FileRequest> g_fileRequests;
 int g_nextFileId = 1;
 
+// Signature scans, so mods can find their data in game versions they weren't written for. A
+// pattern is a set of (offset, u32 value) pairs that must all match. Also served one per frame.
+struct FindRequest {
+	int id;
+	uint32_t start;
+	uint32_t end;
+	std::vector<uint32_t> offsets;
+	std::vector<uint32_t> values;
+	bool done = false;
+	uint32_t result = 0;
+};
+std::mutex g_findLock;
+std::vector<FindRequest> g_findRequests;
+int g_nextFindId = 1;
+
 // Emu thread only.
 uint32_t g_heldButtons = 0;
 std::vector<uint32_t> g_heldVirtKeys;
@@ -387,6 +402,50 @@ void ProcessFileRequest(bool running) {
 	}
 }
 
+uint32_t FindPattern(const FindRequest &req) {
+	uint32_t span = 0;
+	for (uint32_t off : req.offsets) {
+		span = std::max(span, off + 4);
+	}
+	if (req.end <= req.start || req.end - req.start < span || !Memory::IsValidRange(req.start, req.end - req.start)) {
+		return 0;
+	}
+	const u8 *base = Memory::GetPointerUnchecked(req.start);
+	const uint32_t last = req.end - req.start - span;
+	const uint32_t firstOff = req.offsets[0];
+	const uint32_t firstVal = req.values[0];
+	for (uint32_t pos = 0; pos <= last; pos += 4) {
+		uint32_t v;
+		memcpy(&v, base + pos + firstOff, 4);
+		if (v != firstVal) {
+			continue;
+		}
+		bool match = true;
+		for (size_t i = 1; i < req.offsets.size() && match; i++) {
+			memcpy(&v, base + pos + req.offsets[i], 4);
+			match = v == req.values[i];
+		}
+		if (match) {
+			return req.start + pos;
+		}
+	}
+	return 0;
+}
+
+void ProcessFindRequest(bool running) {
+	if (!running) {
+		return;
+	}
+	std::lock_guard<std::mutex> guard(g_findLock);
+	for (FindRequest &r : g_findRequests) {
+		if (!r.done) {
+			r.result = FindPattern(r);
+			r.done = true;
+			return;
+		}
+	}
+}
+
 void UpdateWatches(bool running) {
 	std::lock_guard<std::mutex> guard(g_watchLock);
 	for (Watch &w : g_watches) {
@@ -421,6 +480,7 @@ void DuoBridge_OnFrame() {
 	UpdateButtonPresses(now, inGame);
 	UpdateWatches(running);
 	ProcessFileRequest(running);
+	ProcessFindRequest(running);
 }
 
 extern "C" {
@@ -552,8 +612,56 @@ JNIEXPORT jbyteArray JNICALL Java_org_ppsspp_ppsspp_duo_DuoNative_nativePollGame
 }
 
 JNIEXPORT void JNICALL Java_org_ppsspp_ppsspp_duo_DuoNative_nativeCancelGameFiles(JNIEnv *, jclass) {
-	std::lock_guard<std::mutex> guard(g_fileLock);
-	g_fileRequests.clear();
+	{
+		std::lock_guard<std::mutex> guard(g_fileLock);
+		g_fileRequests.clear();
+	}
+	std::lock_guard<std::mutex> guard(g_findLock);
+	g_findRequests.clear();
+}
+
+JNIEXPORT jint JNICALL Java_org_ppsspp_ppsspp_duo_DuoNative_nativeRequestFind(JNIEnv *env, jclass, jint start, jint end, jintArray joffsets, jintArray jvalues) {
+	if (!joffsets || !jvalues) {
+		return 0;
+	}
+	jsize n = env->GetArrayLength(joffsets);
+	if (n == 0 || n != env->GetArrayLength(jvalues) || n > 1024) {
+		return 0;
+	}
+	FindRequest req;
+	req.start = (uint32_t)start;
+	req.end = (uint32_t)end;
+	req.offsets.resize(n);
+	req.values.resize(n);
+	env->GetIntArrayRegion(joffsets, 0, n, (jint *)req.offsets.data());
+	env->GetIntArrayRegion(jvalues, 0, n, (jint *)req.values.data());
+	for (uint32_t off : req.offsets) {
+		if (off & 3 || off > 0x10000) {
+			return 0;
+		}
+	}
+	std::lock_guard<std::mutex> guard(g_findLock);
+	if (g_findRequests.size() >= 16) {
+		return 0;
+	}
+	req.id = g_nextFindId++;
+	g_findRequests.push_back(std::move(req));
+	return g_findRequests.back().id;
+}
+
+// -1 while pending, then the address of the first match (0 if none). The request is gone afterwards.
+JNIEXPORT jlong JNICALL Java_org_ppsspp_ppsspp_duo_DuoNative_nativePollFind(JNIEnv *, jclass, jint id) {
+	std::lock_guard<std::mutex> guard(g_findLock);
+	auto it = std::find_if(g_findRequests.begin(), g_findRequests.end(), [id](const FindRequest &r) { return r.id == id; });
+	if (it == g_findRequests.end()) {
+		return 0;
+	}
+	if (!it->done) {
+		return -1;
+	}
+	jlong result = it->result;
+	g_findRequests.erase(it);
+	return result;
 }
 
 JNIEXPORT jintArray JNICALL Java_org_ppsspp_ppsspp_duo_DuoNative_nativeGetButtonPresses(JNIEnv *env, jclass) {

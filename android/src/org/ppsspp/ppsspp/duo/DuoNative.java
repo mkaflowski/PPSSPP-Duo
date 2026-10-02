@@ -66,6 +66,12 @@ public final class DuoNative {
 	public static native byte[] nativePollGameFile(int id);
 	public static native void nativeCancelGameFiles();
 
+	// Signature scan of PSP memory in [start, end): first 4-aligned address where the u32 at
+	// address + offsets[i] equals values[i] for every i. Done on the emu thread. Returns a request id.
+	public static native int nativeRequestFind(int start, int end, int[] offsets, int[] values);
+	// -1 while pending, then the address found (0 if none). The request is gone afterwards.
+	public static native long nativePollFind(int id);
+
 	// PSP memory ranges to copy at the end of every frame. Max 16 ranges of 16 KB each.
 	// Pass nulls to clear. Returns false if the request was rejected.
 	public static native boolean nativeSetWatches(int[] addresses, int[] sizes);

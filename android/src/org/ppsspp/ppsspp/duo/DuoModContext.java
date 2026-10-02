@@ -51,6 +51,16 @@ public interface DuoModContext {
 	// are dropped when the mod is deactivated.
 	boolean readGameFile(String path, int offset, int size, GameFileCallback callback);
 
+	interface FindCallback {
+		// address is 0 if nothing matched. Called on the UI thread.
+		void onFound(int address);
+	}
+
+	// Signature scan, for finding game data in versions a mod wasn't written for: the first 4-aligned
+	// address in [start, end) where the u32 at address + offsets[i] equals values[i] for all i.
+	// Scans one request per frame; cache the result per game version.
+	boolean findMemory(int start, int end, int[] offsets, int[] values, FindCallback callback);
+
 	// Memory ranges copied every frame while this mod is active. Cleared when the mod is deactivated.
 	boolean setMemoryWatches(int[] addresses, int[] sizes);
 
