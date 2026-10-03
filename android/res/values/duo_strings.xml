@@ -75,6 +75,14 @@
     <string name="duo_gt_brake">Brake</string>
     <string name="duo_gt_hide_map">Hide map</string>
     <string name="duo_gt_show_map">Show map</string>
+    <string name="duo_mod_jeanne">Battle</string>
+    <string name="duo_mod_jeanne_desc">Jeanne d\'Arc: portraits, HP and MP of your party and the enemies during battles</string>
+    <string name="duo_jeanne_idle">Start a battle to see the units</string>
+    <string name="duo_jeanne_turn">Turn %1$d</string>
+    <string name="duo_jeanne_party">PARTY</string>
+    <string name="duo_jeanne_enemies">ENEMIES</string>
+    <string name="duo_jeanne_level">Lv %1$d</string>
+    <string name="duo_jeanne_defeated">Defeated</string>
 
     <string name="duo_mod_diagnostics">Diagnostics</string>
     <string name="duo_mod_diagnostics_desc">Emulator status, display info and a memory view, for mod developers</string>

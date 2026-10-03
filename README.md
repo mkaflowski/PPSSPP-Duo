@@ -39,9 +39,11 @@ When one of these games starts, its mod opens on the second screen by itself.
 | **Grand Theft Auto: Liberty City Stories** | Map | The whole city map (built from the game's own radar), your position and heading, the route you drove, mission targets and destinations, heading-up rotation | ULES00151 v3.00 (EU) |
 | **Lumines: Puzzle Fusion** | Lumines | Big preview of the next blocks, score, high score, squares deleted, time and how full the board is | ULES00043 v1.01 (EU) |
 | **Gran Turismo** | Telemetry | Speedometer, tachometer with the car's red line, gear, throttle and brake, and a track map that draws itself as you drive | UCES01245 v2.00 (EU) |
+| **Jeanne d'Arc** | Battle | Your party and the enemies with the game's portraits, HP, MP and level (the defeated in black and white), and the turn number | UCUS98700 v1.00 (US) |
 
 Other releases of these games are recognized too, and the mods look up the game data at runtime
-rather than relying on fixed addresses, but only the versions above have been tested.
+rather than relying on fixed addresses, but only the versions above have been tested. Jeanne d'Arc
+is the exception: its mod reads fixed addresses and only supports the US release.
 
 <p align="center">
   <img src="docs/images/duo/drums.png" width="32%" alt="Patapon drums">

@@ -2,6 +2,7 @@ package org.ppsspp.ppsspp.duo;
 
 import org.ppsspp.ppsspp.duo.games.GranTurismoMod;
 import org.ppsspp.ppsspp.duo.games.GtaLcsMapMod;
+import org.ppsspp.ppsspp.duo.games.JeanneDArcMod;
 import org.ppsspp.ppsspp.duo.games.LuminesMod;
 import org.ppsspp.ppsspp.duo.games.PataponMod;
 import org.ppsspp.ppsspp.duo.mods.BlankMod;
@@ -28,6 +29,7 @@ public final class DuoModRegistry {
 		mods.add(new GtaLcsMapMod());
 		mods.add(new LuminesMod());
 		mods.add(new GranTurismoMod());
+		mods.add(new JeanneDArcMod());
 		mods.add(new BlankMod());
 		mods.add(new DiagnosticsMod());
 		return Collections.unmodifiableList(mods);
