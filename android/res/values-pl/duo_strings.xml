@@ -39,7 +39,7 @@
     <string name="duo_mod_blank_desc">Czarny ekran. Dotknij górnej krawędzi, żeby wróciły zakładki</string>
     <string name="duo_mod_patapon">Bębny</string>
     <string name="duo_mod_patapon_desc">Patapon: bębny i śpiewnik, który podąża za twoim rytmem</string>
-    <string name="duo_patapon_style_classic">Wygląd klasyczny</string>
+    <string name="duo_patapon_style_classic">Klasyczny</string>
     <string name="duo_patapon_style_game">Wygląd z gry</string>
     <string name="duo_patapon_march">Marsz</string>
     <string name="duo_patapon_attack">Atak</string>
