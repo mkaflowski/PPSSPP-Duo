@@ -39,7 +39,7 @@ When one of these games starts, its mod opens on the second screen by itself.
 | **Patapon 2** | Drums | The same drum pads and song book, with Patapon 2's songs | UCES01177 v1.00 (EU) |
 | **Grand Theft Auto: Liberty City Stories** | Map | The whole city map (built from the game's own radar), your position and heading, the route you drove, mission targets and destinations, heading-up rotation | ULES00151 v3.00 (EU) |
 | **Lumines: Puzzle Fusion** | Lumines | Big preview of the next blocks, score, high score, squares deleted, time and how full the board is | ULES00043 v1.01 (EU) |
-| **Gran Turismo** | Telemetry | Speedometer, tachometer with the car's red line, gear, throttle and brake, and a track map that draws itself as you drive | UCES01245 v2.00 (EU) |
+| **Gran Turismo** | Telemetry | Speed, tachometer with the car's red line, gear, throttle and brake in the game's own HUD style, your car's picture, and the whole track with its logo and every car on it (or a plain look) | UCES01245 v2.00 (EU) |
 | **Metal Gear Ac!d** | Cards | Your hand of cards, big and readable, with the full text of the card under the cursor (tap a card to read it), Snake's life, deck, cost and turn | ULUS10006 v1.00 (US) |
 | **Jeanne d'Arc** | Battle | Your party and the enemies with the game's portraits, HP, MP and level (the defeated in black and white), and the turn number | UCUS98700 v1.00 (US) |
 
@@ -48,9 +48,10 @@ rather than relying on fixed addresses, but only the versions above have been te
 and Metal Gear Ac!d are the exceptions: their mods only support the US release.
 
 <p align="center">
-  <img src="docs/images/duo/drums.png" width="32%" alt="Patapon drums">
-  <img src="docs/images/duo/map.png" width="32%" alt="GTA LCS map">
-  <img src="docs/images/duo/lumines.png" width="32%" alt="Lumines next blocks">
+  <img src="docs/images/duo/drums.png" width="48%" alt="Patapon drums">
+  <img src="docs/images/duo/gran_turismo.png" width="48%" alt="Gran Turismo telemetry">
+  <img src="docs/images/duo/map.png" width="48%" alt="GTA LCS map">
+  <img src="docs/images/duo/lumines.png" width="48%" alt="Lumines next blocks">
 </p>
 
 ## Mods for every game
