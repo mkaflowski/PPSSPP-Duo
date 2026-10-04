@@ -88,8 +88,11 @@ public final class MyMod extends DuoMod {
   score, high score, squares deleted, time and how full the board is. The game objects are on its
   heap, so they're found with a signature scan every session (see `LuminesMod`).
 - **Telemetry** (Gran Turismo, UCES01245 v2.00): speed, rpm against the car's red line, gear,
-  throttle and brake, and a map of the track drawn from the car's position as you drive. The car
-  and telemetry objects are found by signature scans every race (see `GranTurismoMod`).
+  throttle and brake, and the whole track with every car on it (from the race map the game keeps
+  in memory). The game look uses the HUD's digits, the car's picture and the track's logo and
+  photo, read from `GT.VOL` at runtime (`GtVolume`, `Txs3`, `GtArt`) and cached as PNGs; a button
+  switches to a plain look. The cars, telemetry and map are found by signature scans every race
+  (see `GranTurismoMod`).
 - **Battle** (Jeanne d'Arc, UCUS98700 v1.00): portrait, HP, MP and level of the party and the
   enemies (defeated ones in grayscale), with the turn number. The portraits are the game's own,
   decoded from `DATA/FACE/MFACE*.GIM` on the disc (see `GimImage`). The battle state is in the
