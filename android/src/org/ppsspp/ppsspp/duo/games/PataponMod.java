@@ -31,7 +31,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-// Patapon (the first game): big drum pads and a song book on the second screen.
+// Patapon and Patapon 2: big drum pads and a song book on the second screen.
 //
 // The pads press the face buttons like the PSP does (PATA = square, PON = circle, CHAKA = triangle,
 // DON = cross). Every drum hit is shown, including ones from the physical buttons, and the song book
@@ -45,6 +45,9 @@ public final class PataponMod extends DuoMod {
 	// Patapon 1: Europe (tested), USA, Japan.
 	private static final Set<String> GAME_IDS = new HashSet<>(Arrays.asList(
 		"UCES00995", "UCUS98711", "UCJS10077"));
+	// Patapon 2: Europe (tested), USA, Japan.
+	private static final Set<String> GAME_IDS_2 = new HashSet<>(Arrays.asList(
+		"UCES01177", "UCUS98732", "UCJS10089"));
 
 	// Drums, indexing the pads. The order matches the pad layout below.
 	static final int PATA = 0;
@@ -66,7 +69,7 @@ public final class PataponMod extends DuoMod {
 	}
 
 	// In the order the game teaches them.
-	private static final Song[] SONGS = {
+	private static final Song[] SONGS_1 = {
 		new Song(R.string.duo_patapon_march, PATA, PATA, PATA, PON),
 		new Song(R.string.duo_patapon_attack, PON, PON, PATA, PON),
 		new Song(R.string.duo_patapon_defend, CHAKA, CHAKA, PATA, PON),
@@ -74,6 +77,18 @@ public final class PataponMod extends DuoMod {
 		new Song(R.string.duo_patapon_retreat, PON, PATA, PON, PATA),
 		new Song(R.string.duo_patapon_jump, DON, DON, CHAKA, CHAKA),
 		new Song(R.string.duo_patapon_party, PATA, PON, DON, DON),
+		new Song(R.string.duo_patapon_miracle, DON, DON, DON, DON, DON),
+	};
+
+	// Patapon 2 changed the Party song (from its itemmessage.msg: "PATA PON DON CHAKA").
+	private static final Song[] SONGS_2 = {
+		new Song(R.string.duo_patapon_march, PATA, PATA, PATA, PON),
+		new Song(R.string.duo_patapon_attack, PON, PON, PATA, PON),
+		new Song(R.string.duo_patapon_defend, CHAKA, CHAKA, PATA, PON),
+		new Song(R.string.duo_patapon_charge, PON, PON, CHAKA, CHAKA),
+		new Song(R.string.duo_patapon_retreat, PON, PATA, PON, PATA),
+		new Song(R.string.duo_patapon_jump, DON, DON, CHAKA, CHAKA),
+		new Song(R.string.duo_patapon_party, PATA, PON, DON, CHAKA),
 		new Song(R.string.duo_patapon_miracle, DON, DON, DON, DON, DON),
 	};
 
@@ -112,11 +127,23 @@ public final class PataponMod extends DuoMod {
 
 	@Override
 	public int getPriority(DuoStatus status) {
-		// Picked automatically for Patapon, hidden otherwise. Releases not in the list are recognized
-		// by title (the sequels are "PATAPON 2" / "パタポン2", so the exact match leaves them out).
-		String title = status.title.trim();
-		boolean patapon = GAME_IDS.contains(status.gameId) || title.equalsIgnoreCase("PATAPON") || title.equals("パタポン");
-		return patapon ? 100 : -1;
+		// Picked automatically for Patapon and Patapon 2, hidden otherwise. Releases not in the lists
+		// are recognized by title ("PATAPON", "PATAPON™ 2", "パタポン2"; Patapon 3 is left out).
+		return isPatapon(status) || isPatapon2(status) ? 100 : -1;
+	}
+
+	private static String plainTitle(DuoStatus status) {
+		return status.title.replace("™", "").replace(" ", "").trim().toUpperCase();
+	}
+
+	private static boolean isPatapon(DuoStatus status) {
+		String title = plainTitle(status);
+		return GAME_IDS.contains(status.gameId) || title.equals("PATAPON") || title.equals("パタポン");
+	}
+
+	private static boolean isPatapon2(DuoStatus status) {
+		String title = plainTitle(status);
+		return GAME_IDS_2.contains(status.gameId) || title.equals("PATAPON2") || title.equals("パタポン2");
 	}
 
 	@Override
@@ -129,7 +156,8 @@ public final class PataponMod extends DuoMod {
 	public View onCreateView(DuoModContext host) {
 		Context ctx = host.getContext();
 		FrameLayout root = new FrameLayout(ctx);
-		view = new DrumView(ctx, host);
+		boolean sequel = isPatapon2(host.getStatus());
+		view = new DrumView(ctx, host, sequel ? SONGS_2 : SONGS_1);
 		root.addView(view, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
 		// Small switch between the game's drum artwork and the plain PSP-symbol pads.
@@ -158,7 +186,7 @@ public final class PataponMod extends DuoMod {
 			//noinspection ResultOfMethodCallIgnored
 			dir.mkdirs();
 			File cache = new File(dir, s.gameId + "_" + s.discVersion + "_drums.png");
-			PataponArt.load(host, cache, drums -> {
+			PataponArt.load(host, cache, sequel ? PataponArt.CHAIN_PATAPON2 : PataponArt.CHAIN_PATAPON, drums -> {
 				artLoading = false;
 				art = drums;
 				applyStyle();
@@ -205,7 +233,8 @@ public final class PataponMod extends DuoMod {
 		private final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
 		private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
 		private final RectF rect = new RectF();
-		private final String[] songNames = new String[SONGS.length];
+		private final Song[] songs;
+		private final String[] songNames;
 
 		// Layout.
 		private final float[] padX = new float[4];
@@ -229,13 +258,15 @@ public final class PataponMod extends DuoMod {
 		private long missedUntil;
 		private boolean gameRunning = true;
 
-		DrumView(Context context, DuoModContext host) {
+		DrumView(Context context, DuoModContext host, Song[] songs) {
 			super(context);
 			this.host = host;
+			this.songs = songs;
+			songNames = new String[songs.length];
 			setBackgroundColor(DuoUi.COLOR_BACKGROUND);
 			text.setTypeface(Typeface.DEFAULT_BOLD);
-			for (int i = 0; i < SONGS.length; i++) {
-				songNames[i] = context.getString(SONGS[i].nameRes);
+			for (int i = 0; i < songs.length; i++) {
+				songNames[i] = context.getString(songs[i].nameRes);
 			}
 		}
 
@@ -319,8 +350,8 @@ public final class PataponMod extends DuoMod {
 		}
 
 		private int completedSong() {
-			for (int i = 0; i < SONGS.length; i++) {
-				if (matchedPrefix(SONGS[i], sequence) == SONGS[i].drums.length) {
+			for (int i = 0; i < songs.length; i++) {
+				if (matchedPrefix(songs[i], sequence) == songs[i].drums.length) {
 					return i;
 				}
 			}
@@ -339,8 +370,8 @@ public final class PataponMod extends DuoMod {
 			return seq.size();
 		}
 
-		private static boolean isPrefixOfAnySong(List<Integer> seq) {
-			for (Song s : SONGS) {
+		private boolean isPrefixOfAnySong(List<Integer> seq) {
+			for (Song s : songs) {
 				if (matchedPrefix(s, seq) >= 0) {
 					return true;
 				}
@@ -444,10 +475,10 @@ public final class PataponMod extends DuoMod {
 
 		private void drawBook(Canvas canvas, long now) {
 			float rowGap = DuoUi.dp(getContext(), 5);
-			float rowH = (bookRect.height() - rowGap * (SONGS.length - 1)) / SONGS.length;
+			float rowH = (bookRect.height() - rowGap * (songs.length - 1)) / songs.length;
 			float radius = DuoUi.dp(getContext(), 10);
-			for (int i = 0; i < SONGS.length; i++) {
-				Song song = SONGS[i];
+			for (int i = 0; i < songs.length; i++) {
+				Song song = songs[i];
 				float top = bookRect.top + i * (rowH + rowGap);
 				rect.set(bookRect.left, top, bookRect.right, top + rowH);
 

@@ -73,7 +73,8 @@ public final class MyMod extends DuoMod {
 - **Dashboard**: icon, title, FPS/speed, clock/battery, save/load state with slot picker, fast
   forward, alt. speed, rewind, pause menu, pause, screenshot, mute.
 - **Gamepad**: all PSP buttons and the analog stick, multi-touch.
-- **Drums** (Patapon 1: UCES00995 tested, other releases by ID or title): drum pads and a song book that follows
+- **Drums** (Patapon 1: UCES00995 tested; Patapon 2: UCES01177 tested, with its own Party song,
+  PATA PON DON CHAKA; other releases by ID or title): drum pads and a song book that follows
   your drumming, physical buttons included. The pads can show the game's own drum artwork, read
   from `DATA_CMN.BND` at runtime (see `PataponArt`) and cached as a PNG. Next step: a beat indicator from the game's rhythm
   timer (needs its address, from a savestate taken during a mission).

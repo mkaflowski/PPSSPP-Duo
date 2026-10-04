@@ -36,6 +36,7 @@ When one of these games starts, its mod opens on the second screen by itself.
 | Game | Mod | On the second screen | Tested with |
 |---|---|---|---|
 | **Patapon** | Drums | Big PATA / PON / CHAKA / DON drum pads (with the game's own drum artwork, or a classic look) and a song book that lights up as you drum, physical buttons included | UCES00995 (EU) |
+| **Patapon 2** | Drums | The same drum pads and song book, with Patapon 2's songs | UCES01177 v1.00 (EU) |
 | **Grand Theft Auto: Liberty City Stories** | Map | The whole city map (built from the game's own radar), your position and heading, the route you drove, mission targets and destinations, heading-up rotation | ULES00151 v3.00 (EU) |
 | **Lumines: Puzzle Fusion** | Lumines | Big preview of the next blocks, score, high score, squares deleted, time and how full the board is | ULES00043 v1.01 (EU) |
 | **Gran Turismo** | Telemetry | Speedometer, tachometer with the car's red line, gear, throttle and brake, and a track map that draws itself as you drive | UCES01245 v2.00 (EU) |

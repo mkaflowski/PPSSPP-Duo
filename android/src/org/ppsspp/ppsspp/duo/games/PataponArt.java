@@ -20,8 +20,10 @@ import java.util.zip.Inflater;
 // shipped with the app) and cached as a PNG.
 //
 // It's the 256x256 texture int_font00.gxt, nested in the game's archives:
-//   DATA_CMN.BND :: loadinggroup/systemdata.bnd (gzip) :: loadinggroupcmn.bnd :: texturelist.bnd
-//   :: system.texls :: int_font00.gxt
+//   Patapon:   DATA_CMN.BND :: loadinggroup/systemdata.bnd (gzip) :: loadinggroupcmn.bnd
+//              :: texturelist.bnd :: system.texls :: int_font00.gxt
+//   Patapon 2: DATA_CMN.BND :: loadinggroup/gamedata.bnd :: loadinggroupcmn.bndz :: modellist.bnd
+//              :: game.mdll :: int_font00.gxt
 // The four drums are its quadrants: PATA top left, PON top right, CHAKA bottom left, DON bottom right.
 //
 // BND: 'BND\0', version, alignment, ?, name tree offset (+0x10), data offset (+0x14), counts
@@ -33,8 +35,10 @@ import java.util.zip.Inflater;
 final class PataponArt {
 	private static final String TAG = "PPSSPPDuo";
 	private static final String DATA = "disc0:/PSP_GAME/USRDIR/DATA_CMN.BND";
-	private static final String[] CHAIN = {
+	static final String[] CHAIN_PATAPON = {
 		"loadinggroup/systemdata.bnd", "loadinggroupcmn.bnd", "texturelist.bnd", "system.texls", "int_font00.gxt"};
+	static final String[] CHAIN_PATAPON2 = {
+		"loadinggroup/gamedata.bnd", "loadinggroupcmn.bndz", "modellist.bnd", "game.mdll", "int_font00.gxt"};
 	private static final int CHUNK = 1024 * 1024;
 
 	interface Callback {
@@ -44,7 +48,7 @@ final class PataponArt {
 
 	private PataponArt() {}
 
-	static void load(DuoModContext host, File cache, Callback cb) {
+	static void load(DuoModContext host, File cache, String[] chain, Callback cb) {
 		if (cache.exists()) {
 			Bitmap bmp = BitmapFactory.decodeFile(cache.getPath());
 			if (bmp != null) {
@@ -57,9 +61,9 @@ final class PataponArt {
 			try {
 				int dataOff = u32(header, 0x14);
 				if (dataOff > header.length) {
-					readRange(host, DATA, 0, dataOff, full -> fromTop(host, full, cache, cb));
+					readRange(host, DATA, 0, dataOff, full -> fromTop(host, full, chain, cache, cb));
 				} else {
-					fromTop(host, header, cache, cb);
+					fromTop(host, header, chain, cache, cb);
 				}
 			} catch (Exception e) {
 				fail(cb, e);
@@ -67,20 +71,20 @@ final class PataponArt {
 		});
 	}
 
-	private static void fromTop(DuoModContext host, byte[] header, File cache, Callback cb) {
+	private static void fromTop(DuoModContext host, byte[] header, String[] chain, File cache, Callback cb) {
 		try {
-			int[] entry = findEntry(header, CHAIN[0]);
+			int[] entry = findEntry(header, chain[0]);
 			if (entry == null) {
-				fail(cb, new IllegalStateException(CHAIN[0] + " not found"));
+				fail(cb, new IllegalStateException(chain[0] + " not found"));
 				return;
 			}
 			readRange(host, DATA, entry[0], entry[1], data -> {
 				try {
 					byte[] cur = gunzipIfNeeded(data);
-					for (int i = 1; i < CHAIN.length; i++) {
-						int[] e = findEntry(cur, CHAIN[i]);
+					for (int i = 1; i < chain.length; i++) {
+						int[] e = findEntry(cur, chain[i]);
 						if (e == null) {
-							throw new IllegalStateException(CHAIN[i] + " not found");
+							throw new IllegalStateException(chain[i] + " not found");
 						}
 						byte[] child = new byte[e[1]];
 						System.arraycopy(cur, e[0], child, 0, e[1]);
