@@ -83,6 +83,14 @@
     <string name="duo_jeanne_enemies">WROGOWIE</string>
     <string name="duo_jeanne_level">Poz. %1$d</string>
     <string name="duo_jeanne_defeated">Pokonany</string>
+    <string name="duo_mod_mga">Karty</string>
+    <string name="duo_mod_mga_desc">Metal Gear Ac!d: karty na ręce z pełnym opisem, życie Snake\'a, talia, koszt i tura</string>
+    <string name="duo_mga_idle">Zacznij misję, żeby zobaczyć karty</string>
+    <string name="duo_mga_pick">Dotknij karty, żeby ją przeczytać</string>
+    <string name="duo_mga_hand">RĘKA (%1$d)</string>
+    <string name="duo_mga_deck">Talia</string>
+    <string name="duo_mga_cost">Koszt</string>
+    <string name="duo_mga_turn">Tura</string>
 
     <string name="duo_mod_diagnostics">Diagnostyka</string>
     <string name="duo_mod_diagnostics_desc">Stan emulatora, informacje o ekranie i podgląd pamięci, dla twórców modów</string>

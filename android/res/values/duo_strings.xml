@@ -83,6 +83,14 @@
     <string name="duo_jeanne_enemies">ENEMIES</string>
     <string name="duo_jeanne_level">Lv %1$d</string>
     <string name="duo_jeanne_defeated">Defeated</string>
+    <string name="duo_mod_mga">Cards</string>
+    <string name="duo_mod_mga_desc">Metal Gear Ac!d: your hand of cards with their full text, Snake\'s life, deck, cost and turn</string>
+    <string name="duo_mga_idle">Start a mission to see your cards</string>
+    <string name="duo_mga_pick">Tap a card to read it</string>
+    <string name="duo_mga_hand">HAND (%1$d)</string>
+    <string name="duo_mga_deck">Deck</string>
+    <string name="duo_mga_cost">Cost</string>
+    <string name="duo_mga_turn">Turn</string>
 
     <string name="duo_mod_diagnostics">Diagnostics</string>
     <string name="duo_mod_diagnostics_desc">Emulator status, display info and a memory view, for mod developers</string>

@@ -94,6 +94,11 @@ public final class MyMod extends DuoMod {
   decoded from `DATA/FACE/MFACE*.GIM` on the disc (see `GimImage`). The battle state is in the
   main module's data, so it's read from fixed addresses (see `JeanneDArcMod`); other releases
   aren't supported. Columns with many units switch to one-line rows, then scroll.
+- **Cards** (Metal Gear Ac!d, ULUS10006 v1.00): the hand with each card's type, cost and short
+  text, the full text of the card under the cursor (or a tapped one), Snake's life, deck, cost and
+  turn. The hand, Snake and the status panel are found by the code pointers they hold; card costs
+  and types come from a static table, names and texts from the string table in `stage/com/_zar`
+  (see `MetalGearAcidMod`). Card artwork isn't shown yet (it's in `resident.qar`).
 - **Screen off**: black, tab bar hidden.
 - **Diagnostics**: raw status, display info, memory dump.
 
