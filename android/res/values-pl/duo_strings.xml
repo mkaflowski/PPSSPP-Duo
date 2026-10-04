@@ -75,6 +75,8 @@
     <string name="duo_gt_brake">Hamulec</string>
     <string name="duo_gt_hide_map">Ukryj mapę</string>
     <string name="duo_gt_show_map">Pokaż mapę</string>
+    <string name="duo_gt_style_classic">Klasyczny</string>
+    <string name="duo_gt_style_game">Wygląd z gry</string>
     <string name="duo_mod_jeanne">Bitwa</string>
     <string name="duo_mod_jeanne_desc">Jeanne d\'Arc: portrety, HP i MP twojej drużyny i wrogów w czasie bitwy</string>
     <string name="duo_jeanne_idle">Zacznij bitwę, żeby zobaczyć jednostki</string>
