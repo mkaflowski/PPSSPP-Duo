@@ -86,9 +86,12 @@
     <string name="duo_jeanne_level">Poz. %1$d</string>
     <string name="duo_jeanne_defeated">Pokonany</string>
     <string name="duo_mod_mga">Karty</string>
-    <string name="duo_mod_mga_desc">Metal Gear Ac!d: karty na ręce z pełnym opisem, życie Snake\'a, talia, koszt i tura</string>
+    <string name="duo_mod_mga_desc">Metal Gear Ac!d: karty na ręce z grafiką i pełnym opisem (dotknięcie wybiera kartę w grze), życie Snake\'a, talia, koszt i tura</string>
     <string name="duo_mga_idle">Zacznij misję, żeby zobaczyć karty</string>
-    <string name="duo_mga_pick">Dotknij karty, żeby ją przeczytać</string>
+    <string name="duo_mga_pick">Dotknij karty, żeby ją wybrać</string>
+    <string name="duo_mga_style_classic">Klasyczny</string>
+    <string name="duo_mga_style_game">Wygląd z gry</string>
+    <string name="duo_mga_information">Informacje</string>
     <string name="duo_mga_hand">RĘKA (%1$d)</string>
     <string name="duo_mga_deck">Talia</string>
     <string name="duo_mga_cost">Koszt</string>

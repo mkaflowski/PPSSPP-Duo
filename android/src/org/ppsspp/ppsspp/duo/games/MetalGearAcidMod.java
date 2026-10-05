@@ -1,9 +1,15 @@
 package org.ppsspp.ppsspp.duo.games;
 
 import android.content.Context;
+import android.content.SharedPreferences;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.graphics.LinearGradient;
 import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.os.SystemClock;
 import android.util.Log;
@@ -17,10 +23,12 @@ import android.widget.TextView;
 import org.ppsspp.ppsspp.R;
 import org.ppsspp.ppsspp.duo.DuoMod;
 import org.ppsspp.ppsspp.duo.DuoModContext;
+import org.ppsspp.ppsspp.duo.DuoNative;
 import org.ppsspp.ppsspp.duo.DuoStatus;
 import org.ppsspp.ppsspp.duo.DuoUi;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
@@ -28,7 +36,8 @@ import java.util.Arrays;
 import java.util.zip.Inflater;
 
 // Metal Gear Ac!d: your hand of cards, big and readable, with the full text of the card under the
-// cursor, and Snake's life, deck, cost and turn.
+// cursor, and Snake's life, deck, cost and turn. Tapping a card moves the game's cursor to it.
+// Two looks: the game's own cards (with their illustrations from the disc, see MgaArt) or plain.
 //
 // Found on ULUS10006 v1.00 (by driving the first mission in headless). The game objects live on its
 // heap, so they're found by the code pointers they hold (all in the main module):
@@ -39,14 +48,20 @@ import java.util.zip.Inflater;
 // - status panel: +0x04 = 0x0885ED04, +0x14 = 0x0885F200. +0x78 cards left in the deck, +0x84 cost,
 //   +0x88 turn (u32).
 // - hand list on screen: +0x04 = 0x08859EAC. +0x48 index of the card under the cursor.
-// Card data is a static table at 0x089C9980, 0x28 bytes per card: +0x04 card number (-1 if
-// unused), +0x16 cost (u16), +0x24 type (0 character, 1 item, 2 support, 3 action, 4 weapon).
+// Card records are a static table at 0x089C9984, 0x28 bytes per card (the function at 0x08816790
+// indexes it): +0x00 card number (-1 if unused), +0x12 cost (u16), +0x20 type (0 character, 1 item,
+// 2 support, 3 action, 4 weapon), +0x24 illustration number (cd_<type><number>_alp_ovl, built at
+// 0x0885BDCC).
+// The battle phase is a static u32 at 0x089E1764: 16 while you pick a card from the hand (left and
+// right move the cursor), 17 while you pick a block on the map, 22 during a codec call.
 // Card names and texts are in the string table of stage/com/_zar (u32 size, then zlib): a table of
 // u32 0x80000000 | offset (from the end of the table), with the name of card N at 8 + N, its full
 // text at 259 + N and the short text printed on the card at 510 + N.
 public final class MetalGearAcidMod extends DuoMod {
 	public static final String ID = "metal_gear_acid";
 	private static final String TAG = "PPSSPPDuo";
+	private static final String PREFS = "duo_metal_gear_acid";
+	private static final String PREF_GAME_LOOK = "game_look";
 
 	private static final String[] GAME_IDS = {"ULUS10006"};
 
@@ -62,10 +77,17 @@ public final class MetalGearAcidMod extends DuoMod {
 	private static final int[] LIST_OFFSETS = {0x04};
 	private static final int[] LIST_VALUES = {0x08859EAC};
 
-	private static final int CARD_TABLE = 0x089C9980;
+	private static final int CARD_TABLE = 0x089C9984;
 	private static final int CARD_RECORD = 0x28;
 	private static final int CARD_COUNT = 251;
 	private static final int MAX_HAND = 32;
+
+	private static final int PHASE = 0x089E1764;
+	private static final int PHASE_HAND = 16;
+	// How long a button stays down, and how long to wait for the cursor after letting go.
+	private static final long PRESS_MS = 60;
+	private static final long SETTLE_MS = 120;
+	private static final int MAX_STALLS = 4;
 
 	private static final String TEXT_FILE = "disc0:/PSP_GAME/USRDIR/stage/com/_zar";
 	private static final int TEXT_NAME = 8;
@@ -78,15 +100,33 @@ public final class MetalGearAcidMod extends DuoMod {
 	private static final int W_STATUS = 3;
 	private static final int W_LIST = 4;
 	private static final int W_TABLE = 5;
+	private static final int W_PHASE = 6;
+
+	// The game's card colors.
+	private static final int CARD_FACE_TOP = 0xFFF2F2EE;
+	private static final int CARD_FACE_BOTTOM = 0xFFD6D6D0;
+	private static final int CARD_EDGE = 0xFF5A5C60;
+	private static final int CARD_INK = 0xFF141414;
+	private static final int CARD_BANNER = 0xFF2E2F31;
+	private static final int CARD_BANNER_TEXT = 0xFFE4E4E0;
+	private static final int GAME_BACKGROUND = 0xFF0A0C0B;
+	private static final int GAME_PANEL = 0xFF17191A;
 
 	// Kept across tab switches: the texts take a moment to read and unpack.
 	private static String[] texts;
 	private static boolean textsLoading;
+	private static MgaArt art;
+	private static String artGame = "";
+	private static boolean artLoading;
 
 	private DuoModContext host;
 	private HandView handView;
-	private View detailPanel;
+	private CardTopView cardTop;
+	private LinearLayout root;
+	private LinearLayout detailPanel;
 	private TextView detailTitle, detailText;
+	private boolean gameLook;
+	private Typeface condensed;
 
 	private int hand, unit, status, list;
 	// Watch #1 follows the hand's card array.
@@ -94,12 +134,20 @@ public final class MetalGearAcidMod extends DuoMod {
 	private int unitSearchFrom;
 	private int searching;  // bit per object being searched for
 	private long lastSearch;
-	private int[] costs, types;
+	private int[] costs, types, illustrations;
 
-	// The card shown in the detail panel. Follows the game's cursor, or a tap on the second screen
-	// until the cursor moves.
+	// The card shown in the detail panel: the game's cursor, a tapped card until the cursor moves,
+	// or the card the cursor is being moved to.
 	private int gameCursor = -1;
 	private int tapped = -1;
+	private int phase = -1;
+
+	// Moving the game's cursor to a tapped card, one left/right press at a time.
+	private int moveTarget = -1;
+	private int heldButton;
+	private int pressedAt = -1;   // the cursor when the last press was made
+	private long releasedAt;
+	private int stalls;
 
 	@Override
 	public String getId() {
@@ -123,7 +171,7 @@ public final class MetalGearAcidMod extends DuoMod {
 
 	@Override
 	public long getStatusIntervalMs() {
-		return 150;
+		return moveTarget >= 0 ? 50 : 150;
 	}
 
 	@Override
@@ -134,12 +182,16 @@ public final class MetalGearAcidMod extends DuoMod {
 		cardsAddr = cardsCap = 0;
 		unitSearchFrom = SCAN_START;
 		searching = 0;
-		costs = types = null;
-		gameCursor = tapped = -1;
+		costs = types = illustrations = null;
+		gameCursor = tapped = phase = -1;
+		moveTarget = -1;
+		heldButton = 0;
+		condensed = Typeface.create("sans-serif-condensed", Typeface.BOLD);
+		SharedPreferences prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+		gameLook = prefs.getBoolean(PREF_GAME_LOOK, true);
 
-		LinearLayout root = new LinearLayout(ctx);
+		root = new LinearLayout(ctx);
 		root.setOrientation(LinearLayout.HORIZONTAL);
-		root.setBackgroundColor(DuoUi.COLOR_BACKGROUND);
 		int pad = DuoUi.dp(ctx, 24);
 		root.setPadding(pad, DuoUi.dp(ctx, 12), pad, pad);
 
@@ -148,9 +200,10 @@ public final class MetalGearAcidMod extends DuoMod {
 
 		LinearLayout detail = new LinearLayout(ctx);
 		detail.setOrientation(LinearLayout.VERTICAL);
-		detail.setBackground(DuoUi.rounded(ctx, DuoUi.COLOR_SURFACE, 14));
 		int dp = DuoUi.dp(ctx, 16);
 		detail.setPadding(dp, dp, dp, dp);
+		cardTop = new CardTopView(ctx);
+		detail.addView(cardTop, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 		detailTitle = DuoUi.text(ctx, "", 19, DuoUi.COLOR_TEXT);
 		detailTitle.setTypeface(Typeface.DEFAULT_BOLD);
 		detail.addView(detailTitle);
@@ -168,17 +221,43 @@ public final class MetalGearAcidMod extends DuoMod {
 		root.addView(detail, lp);
 		detailPanel = detail;
 		detail.setVisibility(View.GONE);
+		applyLook();
 
 		watch();
 		loadTexts();
 		return root;
 	}
 
+	private void setGameLook(boolean on) {
+		gameLook = on;
+		host.getContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(PREF_GAME_LOOK, on).apply();
+		applyLook();
+		handView.invalidate();
+	}
+
+	private void applyLook() {
+		Context ctx = host.getContext();
+		root.setBackgroundColor(gameLook ? GAME_BACKGROUND : DuoUi.COLOR_BACKGROUND);
+		if (gameLook) {
+			int dp = DuoUi.dp(ctx, 12);
+			detailPanel.setPadding(dp, dp, dp + DuoUi.dp(ctx, 10), dp);
+		} else {
+			int dp = DuoUi.dp(ctx, 16);
+			detailPanel.setPadding(dp, dp, dp, dp);
+			detailPanel.setBackground(DuoUi.rounded(ctx, DuoUi.COLOR_SURFACE, 14));
+		}
+		cardTop.setVisibility(gameLook ? View.VISIBLE : View.GONE);
+		detailText.setTextSize(gameLook ? 15 : 14);
+		detailText.setTypeface(gameLook ? Typeface.create("sans-serif-condensed", Typeface.NORMAL) : Typeface.DEFAULT);
+		shownDetail = -2;
+		showDetail(currentDetail);
+	}
+
 	private void watch() {
 		int fallback = SCAN_START;
 		host.setMemoryWatches(
-			new int[] {or(hand, fallback), or(cardsAddr, fallback), or(unit, fallback), or(status, fallback), or(list, fallback), CARD_TABLE},
-			new int[] {0xA0, Math.max(4, cardsCap * 4), 0x60, 0x90, 0x50, CARD_RECORD * CARD_COUNT});
+			new int[] {or(hand, fallback), or(cardsAddr, fallback), or(unit, fallback), or(status, fallback), or(list, fallback), CARD_TABLE, PHASE},
+			new int[] {0xA0, Math.max(4, cardsCap * 4), 0x60, 0x90, 0x50, CARD_RECORD * CARD_COUNT, 4});
 	}
 
 	private static int or(int addr, int fallback) {
@@ -203,6 +282,24 @@ public final class MetalGearAcidMod extends DuoMod {
 		if (!queued) {
 			textsLoading = false;
 		}
+	}
+
+	private void loadArt(DuoStatus s) {
+		String key = s.gameId + "_" + s.discVersion;
+		if (artLoading || (art != null && key.equals(artGame))) {
+			return;
+		}
+		artLoading = true;
+		File dir = new File(host.getContext().getFilesDir(), "duo/mga/" + key);
+		MgaArt.load(host, dir, a -> {
+			artLoading = false;
+			art = a;
+			artGame = key;
+			if (handView != null) {
+				handView.invalidate();
+				cardTop.invalidate();
+			}
+		});
 	}
 
 	// Signature scans, one object at a time.
@@ -277,14 +374,22 @@ public final class MetalGearAcidMod extends DuoMod {
 	@Override
 	public void onStatus(DuoStatus s) {
 		if (!s.isInGame() && !s.isPauseMenu()) {
+			stopMove();
 			return;
 		}
 		if (texts == null && s.isInGame()) {
 			loadTexts();
 		}
+		loadArt(s);
 		if (costs == null) {
 			readTable();
 		}
+		byte[] phaseData = host.readMemoryWatch(W_PHASE);
+		int newPhase = phaseData != null && phaseData.length >= 4 ? le(phaseData).getInt(0) : -1;
+		if (newPhase != phase && moveTarget < 0) {
+			tapped = -1;   // a card read in another phase isn't the game's choice: follow its cursor again
+		}
+		phase = newPhase;
 
 		// Objects that went away (end of the mission) are searched for again. A watch reads null
 		// until the frame after it's set, which doesn't mean anything.
@@ -319,6 +424,7 @@ public final class MetalGearAcidMod extends DuoMod {
 			search();
 		}
 		if (hand == 0) {
+			stopMove();
 			handView.setData(null, null, -1);
 			showDetail(-1);
 			return;
@@ -368,14 +474,80 @@ public final class MetalGearAcidMod extends DuoMod {
 		}
 		if (cursor != gameCursor) {
 			gameCursor = cursor;
-			tapped = -1;
+			if (moveTarget < 0) {
+				tapped = -1;
+			}
 		}
-		int selected = tapped >= 0 ? tapped : cursor;
+		if (s.isInGame()) {
+			driveCursor(cursor, count);
+		} else {
+			stopMove();   // never press buttons into the pause menu
+		}
+		int selected = moveTarget >= 0 ? moveTarget : tapped >= 0 ? tapped : cursor;
 		if (selected < 0 || selected >= count) {
 			selected = -1;
 		}
 		handView.setData(cards, stats, selected);
 		showDetail(selected >= 0 ? cards[selected] : -1);
+	}
+
+	// Presses left or right until the game's cursor is on the tapped card. Only while the game is
+	// waiting for a card from the hand, and only as long as each press moves the cursor.
+	private void driveCursor(int cursor, int count) {
+		if (moveTarget < 0) {
+			return;
+		}
+		if (phase != PHASE_HAND || cursor < 0 || moveTarget >= count || cursor == moveTarget) {
+			stopMove();
+			return;
+		}
+		if (heldButton != 0) {
+			return;
+		}
+		if (cursor == pressedAt) {
+			// The last press hasn't shown up yet, or the game ignored it.
+			if (SystemClock.uptimeMillis() - releasedAt < SETTLE_MS) {
+				return;
+			}
+			if (++stalls >= MAX_STALLS) {
+				Log.i(TAG, "MGA: the cursor doesn't move, giving up");
+				stopMove();
+				return;
+			}
+		} else {
+			stalls = 0;
+		}
+		int button = moveTarget > cursor ? DuoNative.CTRL_RIGHT : DuoNative.CTRL_LEFT;
+		pressedAt = cursor;
+		heldButton = button;
+		host.pressButton(button, true);
+		handView.postDelayed(() -> {
+			if (heldButton == button && host != null) {
+				host.pressButton(button, false);
+				heldButton = 0;
+				releasedAt = SystemClock.uptimeMillis();
+			}
+		}, PRESS_MS);
+	}
+
+	private void startMove(int target) {
+		if (phase != PHASE_HAND || gameCursor < 0 || target == gameCursor) {
+			return;
+		}
+		moveTarget = target;
+		pressedAt = -1;
+		stalls = 0;
+	}
+
+	private void stopMove() {
+		if (heldButton != 0 && host != null) {
+			host.pressButton(heldButton, false);
+		}
+		heldButton = 0;
+		if (moveTarget >= 0) {
+			tapped = moveTarget == gameCursor ? -1 : moveTarget;
+		}
+		moveTarget = -1;
 	}
 
 	private void readTable() {
@@ -384,12 +556,13 @@ public final class MetalGearAcidMod extends DuoMod {
 			return;
 		}
 		ByteBuffer b = le(data);
-		int[] c = new int[CARD_COUNT], t = new int[CARD_COUNT];
+		int[] c = new int[CARD_COUNT], t = new int[CARD_COUNT], n = new int[CARD_COUNT];
 		for (int i = 0; i < CARD_COUNT; i++) {
 			int r = i * CARD_RECORD;
-			int id = b.getInt(r + 0x04);
-			c[i] = b.getShort(r + 0x16) & 0xFFFF;
-			t[i] = id == i ? b.getInt(r + 0x24) : -1;
+			int id = b.getInt(r);
+			c[i] = b.getShort(r + 0x12) & 0xFFFF;
+			t[i] = id == i ? b.getInt(r + 0x20) : -1;
+			n[i] = b.getInt(r + 0x24);
 		}
 		// SOCOM, the first card, costs 5: anything else means this isn't the table.
 		if (t[0] != 4 || c[0] != 5) {
@@ -397,11 +570,21 @@ public final class MetalGearAcidMod extends DuoMod {
 		}
 		costs = c;
 		types = t;
+		illustrations = n;
+	}
+
+	private Bitmap illustration(int id) {
+		if (art == null || types == null || illustrations == null || id < 0 || id >= CARD_COUNT) {
+			return null;
+		}
+		return art.illustration(types[id], illustrations[id]);
 	}
 
 	private int shownDetail = -2;
+	private int currentDetail = -1;
 
 	private void showDetail(int id) {
+		currentDetail = id;
 		// Nothing selected shows a hint only while there are cards to tap.
 		int key = id >= 0 ? id : handView.hasCards() ? -1 : -3;
 		if (key == shownDetail) {
@@ -411,20 +594,35 @@ public final class MetalGearAcidMod extends DuoMod {
 		Context ctx = host.getContext();
 		// Without cards the panel goes away and the hand view's message takes the whole width.
 		detailPanel.setVisibility(handView.hasCards() ? View.VISIBLE : View.GONE);
+		int type = id >= 0 && types != null ? types[id] : -1;
+		if (gameLook) {
+			detailPanel.setBackground(new CardFace(ctx, id >= 0 ? typeColor(type) : CARD_FACE_BOTTOM, id >= 0));
+		}
+		cardTop.setCard(id);
+		cardTop.setVisibility(gameLook && id >= 0 ? View.VISIBLE : View.GONE);
 		if (id < 0) {
 			detailTitle.setVisibility(View.GONE);
 			detailText.setText(handView.hasCards() ? ctx.getString(R.string.duo_mga_pick) : "");
-			detailText.setTextColor(DuoUi.COLOR_TEXT_DIM);
+			detailText.setTextColor(gameLook ? 0xFF55585C : DuoUi.COLOR_TEXT_DIM);
 			detailText.setGravity(Gravity.CENTER);
 			return;
 		}
 		detailTitle.setVisibility(View.VISIBLE);
 		detailText.setGravity(Gravity.START | Gravity.TOP);
-		detailTitle.setText(cardName(id));
-		detailTitle.setTextColor(typeColor(types != null ? types[id] : -1));
+		if (gameLook) {
+			detailTitle.setText(ctx.getString(R.string.duo_mga_information));
+			detailTitle.setTextSize(13);
+			detailTitle.setTypeface(condensed);
+			detailTitle.setTextColor(CARD_INK);
+		} else {
+			detailTitle.setText(cardName(id));
+			detailTitle.setTextSize(19);
+			detailTitle.setTypeface(Typeface.DEFAULT_BOLD);
+			detailTitle.setTextColor(typeColor(type));
+		}
 		String full = text(TEXT_FULL + id);
 		detailText.setText(full != null ? reflow(full) : "");
-		detailText.setTextColor(DuoUi.COLOR_TEXT);
+		detailText.setTextColor(gameLook ? CARD_INK : DuoUi.COLOR_TEXT);
 	}
 
 	static String text(int index) {
@@ -623,16 +821,181 @@ public final class MetalGearAcidMod extends DuoMod {
 
 	@Override
 	public void onDestroyView() {
+		stopMove();
 		handView = null;
+		cardTop = null;
+		root = null;
 		detailPanel = null;
 		detailTitle = detailText = null;
 		host = null;
 		shownDetail = -2;
 	}
 
+	// Draws the art scaled to cover the rectangle, cropped to it.
+	private static void drawCover(Canvas canvas, Bitmap bmp, RectF dst, Paint paint) {
+		float sw = bmp.getWidth(), sh = bmp.getHeight();
+		float scale = Math.max(dst.width() / sw, dst.height() / sh);
+		float cw = dst.width() / scale, ch = dst.height() / scale;
+		Rect src = new Rect(Math.round((sw - cw) / 2), Math.round((sh - ch) / 2), Math.round((sw + cw) / 2), Math.round((sh + ch) / 2));
+		paint.setFilterBitmap(true);
+		canvas.drawBitmap(bmp, src, dst, paint);
+	}
+
+	// The face of a card in the game: light, with its type's color down the right edge.
+	private static final class CardFace extends android.graphics.drawable.Drawable {
+		private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+		private final RectF rect = new RectF();
+		private final float radius, band;
+		private final int color;
+		private final boolean showBand;
+
+		CardFace(Context ctx, int color, boolean showBand) {
+			radius = DuoUi.dp(ctx, 6);
+			band = DuoUi.dp(ctx, 10);
+			this.color = color;
+			this.showBand = showBand;
+		}
+
+		@Override
+		public void draw(Canvas canvas) {
+			rect.set(getBounds());
+			drawFace(canvas, rect, paint, radius, showBand ? band : 0, color);
+		}
+
+		@Override
+		public void setAlpha(int alpha) {}
+
+		@Override
+		public void setColorFilter(android.graphics.ColorFilter filter) {}
+
+		@Override
+		public int getOpacity() {
+			return android.graphics.PixelFormat.TRANSLUCENT;
+		}
+	}
+
+	private static void drawFace(Canvas canvas, RectF r, Paint paint, float radius, float band, int color) {
+		paint.setStyle(Paint.Style.FILL);
+		paint.setShader(new LinearGradient(0, r.top, 0, r.bottom, CARD_FACE_TOP, CARD_FACE_BOTTOM, Shader.TileMode.CLAMP));
+		canvas.drawRoundRect(r, radius, radius, paint);
+		paint.setShader(null);
+		if (band > 0) {
+			canvas.save();
+			canvas.clipRect(r.right - band, r.top, r.right, r.bottom);
+			paint.setColor(color);
+			canvas.drawRoundRect(r, radius, radius, paint);
+			canvas.restore();
+		}
+		paint.setStyle(Paint.Style.STROKE);
+		paint.setStrokeWidth(Math.max(1, radius / 4));
+		paint.setColor(CARD_EDGE);
+		canvas.drawRoundRect(r, radius, radius, paint);
+		paint.setStyle(Paint.Style.FILL);
+	}
+
+	// Letter-spaced name on the dark strip under the art, as on the game's cards.
+	private void drawBanner(Canvas canvas, Paint paint, RectF r, String name) {
+		paint.setColor(CARD_BANNER);
+		canvas.drawRect(r, paint);
+		paint.setTypeface(condensed);
+		paint.setColor(CARD_BANNER_TEXT);
+		paint.setTextAlign(Paint.Align.CENTER);
+		paint.setTextSize(r.height() * 0.66f);
+		paint.setLetterSpacing(0.08f);
+		canvas.drawText(fit(paint, name, r.width() * 0.94f), r.centerX(), r.centerY() + paint.getTextSize() * 0.36f, paint);
+		paint.setLetterSpacing(0);
+	}
+
+	private static String fit(Paint paint, String text, float max) {
+		if (paint.measureText(text) <= max) {
+			return text;
+		}
+		int n = text.length();
+		while (n > 1 && paint.measureText(text, 0, n) + paint.measureText("…") > max) {
+			n--;
+		}
+		return text.substring(0, n) + "…";
+	}
+
+	// The top of the big card in the detail panel: type, cost, illustration and name.
+	private final class CardTopView extends View {
+		private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+		private final RectF rect = new RectF();
+		private int card = -1;
+
+		CardTopView(Context context) {
+			super(context);
+		}
+
+		void setCard(int id) {
+			if (id != card) {
+				card = id;
+				invalidate();
+			}
+		}
+
+		@Override
+		protected void onMeasure(int widthSpec, int heightSpec) {
+			int w = MeasureSpec.getSize(widthSpec);
+			// Header, art at the illustrations' 112:72, name strip.
+			int h = Math.round(w * 0.12f + w * 72f / 112f + w * 0.11f + DuoUi.dp(getContext(), 4));
+			setMeasuredDimension(w, h);
+		}
+
+		@Override
+		protected void onDraw(Canvas canvas) {
+			if (card < 0) {
+				return;
+			}
+			float w = getWidth();
+			int type = types != null ? types[card] : -1;
+			float headH = w * 0.12f;
+			paint.setTypeface(condensed);
+			paint.setColor(CARD_INK);
+			paint.setTextAlign(Paint.Align.LEFT);
+			paint.setTextSize(headH * 0.72f);
+			canvas.drawText(typeName(type), 0, headH * 0.74f, paint);
+
+			float artTop = headH;
+			float artH = w * 72f / 112f;
+			rect.set(0, artTop, w, artTop + artH);
+			Bitmap bmp = illustration(card);
+			if (bmp != null) {
+				drawCover(canvas, bmp, rect, paint);
+			} else {
+				paint.setColor(0xFF9A9C9E);
+				canvas.drawRect(rect, paint);
+			}
+			paint.setStyle(Paint.Style.STROKE);
+			paint.setStrokeWidth(DuoUi.dp(getContext(), 1));
+			paint.setColor(CARD_EDGE);
+			canvas.drawRect(rect, paint);
+			paint.setStyle(Paint.Style.FILL);
+
+			// The cost, big, over the art's top right corner.
+			if (costs != null) {
+				String cost = String.valueOf(costs[card]);
+				paint.setTextAlign(Paint.Align.RIGHT);
+				paint.setTextSize(headH * 1.9f);
+				paint.setStyle(Paint.Style.STROKE);
+				paint.setStrokeWidth(headH * 0.16f);
+				paint.setColor(CARD_FACE_TOP);
+				canvas.drawText(cost, w - headH * 0.1f, headH * 1.55f, paint);
+				paint.setStyle(Paint.Style.FILL);
+				paint.setColor(CARD_INK);
+				canvas.drawText(cost, w - headH * 0.1f, headH * 1.55f, paint);
+			}
+
+			RectF banner = new RectF(0, artTop + artH, w, artTop + artH + w * 0.11f);
+			drawBanner(canvas, paint, banner, cardName(card));
+		}
+	}
+
 	private final class HandView extends View {
 		private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
 		private final RectF rect = new RectF();
+		private final RectF styleRect = new RectF();
+		private final Path path = new Path();
 		private int[] cards;
 		private int[] stats;  // life, max life, deck, cost, turn
 		private int selected = -1;
@@ -648,7 +1011,7 @@ public final class MetalGearAcidMod extends DuoMod {
 		}
 
 		void setData(int[] cards, int[] stats, int selected) {
-			String sig = Arrays.toString(cards) + Arrays.toString(stats) + selected + (texts != null) + (costs != null);
+			String sig = Arrays.toString(cards) + Arrays.toString(stats) + selected + (texts != null) + (costs != null) + (art != null);
 			if (sig.equals(signature)) {
 				return;
 			}
@@ -664,11 +1027,17 @@ public final class MetalGearAcidMod extends DuoMod {
 			if (e.getActionMasked() != MotionEvent.ACTION_UP) {
 				return e.getActionMasked() == MotionEvent.ACTION_DOWN;
 			}
+			if (hasCards() && styleRect.contains(e.getX(), e.getY())) {
+				host.haptic(this);
+				setGameLook(!gameLook);
+				return true;
+			}
 			for (int i = 0; i < cardRects.length && cards != null && i < cards.length; i++) {
 				if (cardRects[i] != null && cardRects[i].contains(e.getX(), e.getY())) {
 					tapped = i;
 					selected = i;
 					host.haptic(this);
+					startMove(i);
 					showDetail(cards[i]);
 					invalidate();
 					return true;
@@ -681,11 +1050,11 @@ public final class MetalGearAcidMod extends DuoMod {
 		protected void onDraw(Canvas canvas) {
 			Context ctx = getContext();
 			float w = getWidth(), h = getHeight();
-			paint.setTypeface(Typeface.DEFAULT_BOLD);
+			paint.setTypeface(gameLook ? condensed : Typeface.DEFAULT_BOLD);
 			float top = DuoUi.dp(ctx, 12);
 
 			if (stats != null) {
-				top = drawStatus(canvas, w, top);
+				top = gameLook ? drawGameStatus(canvas, w, top) : drawStatus(canvas, w, top);
 			}
 			if (cards == null) {
 				paint.setColor(DuoUi.COLOR_TEXT_DIM);
@@ -693,29 +1062,69 @@ public final class MetalGearAcidMod extends DuoMod {
 				paint.setTextSize(DuoUi.dp(ctx, 18));
 				canvas.drawText(ctx.getString(R.string.duo_mga_idle), w / 2, h / 2, paint);
 				cardRects = new RectF[0];
+				styleRect.setEmpty();
 				return;
 			}
 
 			paint.setTextAlign(Paint.Align.LEFT);
 			paint.setTextSize(DuoUi.dp(ctx, 14));
 			paint.setColor(DuoUi.COLOR_TEXT_DIM);
-			canvas.drawText(ctx.getString(R.string.duo_mga_hand, cards.length), 0, top + DuoUi.dp(ctx, 14), paint);
-			top += DuoUi.dp(ctx, 24);
+			float lineH = DuoUi.dp(ctx, 32);
+			canvas.drawText(ctx.getString(R.string.duo_mga_hand, cards.length), 0, top + lineH / 2 + DuoUi.dp(ctx, 5), paint);
+			drawStyleButton(canvas, w, top, lineH);
+			top += lineH + DuoUi.dp(ctx, 8);
 
-			// Two columns of cards, as many rows as needed.
+			// Two or three columns of cards, as many rows as needed.
 			int n = cards.length;
 			int cols = n > 8 ? 3 : 2;
+			if (gameLook && n > 4) {
+				cols = 3;
+			}
 			int rows = Math.max(1, (n + cols - 1) / cols);
 			float gap = DuoUi.dp(ctx, 10);
 			float cw = (w - gap * (cols - 1)) / cols;
-			float ch = Math.min(DuoUi.dp(ctx, 150), (h - top - gap * (rows - 1)) / rows);
+			float maxH = gameLook ? cw * 1.3f : DuoUi.dp(ctx, 150);
+			// Room above the cards for the selected one to rise.
+			float lift = gameLook ? DuoUi.dp(ctx, 8) : 0;
+			float ch = Math.min(maxH, (h - top - lift - gap * (rows - 1)) / rows);
+			top += lift;
 			cardRects = new RectF[n];
 			for (int i = 0; i < n; i++) {
 				float x = (i % cols) * (cw + gap);
 				float y = top + (i / cols) * (ch + gap);
 				cardRects[i] = new RectF(x, y, x + cw, y + ch);
-				drawCard(canvas, cards[i], cardRects[i], i == selected);
+				if (i != selected) {
+					drawAnyCard(canvas, cards[i], cardRects[i], false);
+				}
 			}
+			// The selected card last, over its neighbours.
+			if (selected >= 0 && selected < n) {
+				drawAnyCard(canvas, cards[selected], cardRects[selected], true);
+			}
+		}
+
+		private void drawAnyCard(Canvas canvas, int id, RectF r, boolean sel) {
+			if (gameLook) {
+				drawGameCard(canvas, id, r, sel);
+			} else {
+				drawCard(canvas, id, r, sel);
+			}
+		}
+
+		private void drawStyleButton(Canvas canvas, float w, float top, float lineH) {
+			Context ctx = getContext();
+			String label = ctx.getString(gameLook ? R.string.duo_mga_style_classic : R.string.duo_mga_style_game);
+			paint.setTypeface(Typeface.DEFAULT_BOLD);
+			paint.setTextSize(DuoUi.dp(ctx, 13));
+			float pad = DuoUi.dp(ctx, 12);
+			float bw = paint.measureText(label) + 2 * pad;
+			styleRect.set(w - bw, top, w, top + lineH);
+			paint.setColor(DuoUi.COLOR_SURFACE);
+			canvas.drawRoundRect(styleRect, lineH / 2, lineH / 2, paint);
+			paint.setColor(DuoUi.COLOR_TEXT);
+			paint.setTextAlign(Paint.Align.CENTER);
+			canvas.drawText(label, styleRect.centerX(), styleRect.centerY() + paint.getTextSize() * 0.36f, paint);
+			paint.setTypeface(gameLook ? condensed : Typeface.DEFAULT_BOLD);
 		}
 
 		private float drawStatus(Canvas canvas, float w, float top) {
@@ -765,6 +1174,78 @@ public final class MetalGearAcidMod extends DuoMod {
 			return chipTop + chipH + DuoUi.dp(ctx, 14);
 		}
 
+		// As the game's HUD: "SNAKE ◆ life/max" over a thin white bar, and the black panel with the
+		// deck, cost (a stopwatch) and turn.
+		private float drawGameStatus(Canvas canvas, float w, float top) {
+			Context ctx = getContext();
+			int life = stats[0], max = stats[1];
+			float panelW = Math.min(w * 0.42f, DuoUi.dp(ctx, 230));
+			float leftW = w - panelW - DuoUi.dp(ctx, 14);
+			paint.setTextAlign(Paint.Align.LEFT);
+			paint.setTextSize(DuoUi.dp(ctx, 17));
+			paint.setColor(0xFFF0F0F0);
+			canvas.drawText("SNAKE", 0, top + DuoUi.dp(ctx, 17), paint);
+			paint.setTextAlign(Paint.Align.RIGHT);
+			paint.setTextSize(DuoUi.dp(ctx, 22));
+			canvas.drawText("◆ " + life + "/" + max, leftW, top + DuoUi.dp(ctx, 19), paint);
+			float barTop = top + DuoUi.dp(ctx, 28);
+			float barH = DuoUi.dp(ctx, 7);
+			rect.set(0, barTop, leftW, barTop + barH);
+			paint.setColor(0xFF3A3C3E);
+			canvas.drawRect(rect, paint);
+			float frac = max > 0 ? Math.max(0, Math.min(1, life / (float)max)) : 0;
+			rect.set(0, barTop, leftW * frac, barTop + barH);
+			paint.setColor(frac > 0.25f ? 0xFFF2F2F2 : 0xFFE04848);
+			canvas.drawRect(rect, paint);
+
+			float rowH = DuoUi.dp(ctx, 26);
+			float px = w - panelW;
+			rect.set(px, top, w, top + rowH * 3 + DuoUi.dp(ctx, 8));
+			paint.setColor(0xFF000000);
+			canvas.drawRect(rect, paint);
+			paint.setColor(0xFFE8E8E8);
+			canvas.drawRect(px, top, w, top + DuoUi.dp(ctx, 3), paint);
+			int[] values = {stats[2], stats[3], stats[4]};
+			for (int i = 0; i < 3; i++) {
+				float cy = top + DuoUi.dp(ctx, 6) + rowH * i + rowH / 2;
+				int color = i == 1 && values[i] > 0 ? 0xFFF09A2A : 0xFFF0F0F0;
+				drawIcon(canvas, i, px + DuoUi.dp(ctx, 18), cy, rowH * 0.32f, color);
+				paint.setTextAlign(Paint.Align.RIGHT);
+				paint.setTextSize(rowH * 0.85f);
+				paint.setColor(color);
+				canvas.drawText(String.valueOf(values[i]), w - DuoUi.dp(ctx, 12), cy + rowH * 0.3f, paint);
+			}
+			return top + rowH * 3 + DuoUi.dp(ctx, 20);
+		}
+
+		// 0 deck (a stack of cards), 1 cost (a stopwatch), 2 turn (a play arrow).
+		private void drawIcon(Canvas canvas, int which, float cx, float cy, float r, int color) {
+			paint.setColor(color);
+			if (which == 0) {
+				paint.setStyle(Paint.Style.STROKE);
+				paint.setStrokeWidth(r * 0.25f);
+				rect.set(cx - r * 0.5f, cy - r * 0.9f, cx + r * 0.7f, cy + r * 0.6f);
+				canvas.drawRect(rect, paint);
+				paint.setStyle(Paint.Style.FILL);
+				rect.set(cx - r * 0.8f, cy - r * 0.6f, cx + r * 0.4f, cy + r * 0.9f);
+				canvas.drawRect(rect, paint);
+			} else if (which == 1) {
+				paint.setStyle(Paint.Style.STROKE);
+				paint.setStrokeWidth(r * 0.25f);
+				canvas.drawCircle(cx, cy + r * 0.1f, r * 0.8f, paint);
+				canvas.drawLine(cx, cy + r * 0.1f, cx, cy - r * 0.45f, paint);
+				canvas.drawLine(cx - r * 0.3f, cy - r, cx + r * 0.3f, cy - r, paint);
+				paint.setStyle(Paint.Style.FILL);
+			} else {
+				path.reset();
+				path.moveTo(cx - r * 0.6f, cy - r * 0.85f);
+				path.lineTo(cx + r * 0.8f, cy);
+				path.lineTo(cx - r * 0.6f, cy + r * 0.85f);
+				path.close();
+				canvas.drawPath(path, paint);
+			}
+		}
+
 		private void drawCard(Canvas canvas, int id, RectF r, boolean sel) {
 			Context ctx = getContext();
 			int type = types != null ? types[id] : -1;
@@ -799,7 +1280,7 @@ public final class MetalGearAcidMod extends DuoMod {
 			paint.setTextSize(nameSize);
 			paint.setColor(DuoUi.COLOR_TEXT);
 			y += nameSize;
-			canvas.drawText(fit(cardName(id), r.width() - 2 * inner), r.left + inner, y, paint);
+			canvas.drawText(fit(paint, cardName(id), r.width() - 2 * inner), r.left + inner, y, paint);
 			String info = text(TEXT_SHORT + id);
 			if (info != null) {
 				paint.setTypeface(Typeface.DEFAULT);
@@ -811,7 +1292,7 @@ public final class MetalGearAcidMod extends DuoMod {
 					if (y > r.bottom - inner / 2) {
 						break;
 					}
-					canvas.drawText(fit(line, r.width() - 2 * inner), r.left + inner, y, paint);
+					canvas.drawText(fit(paint, line, r.width() - 2 * inner), r.left + inner, y, paint);
 				}
 				paint.setTypeface(Typeface.DEFAULT_BOLD);
 			}
@@ -829,15 +1310,93 @@ public final class MetalGearAcidMod extends DuoMod {
 			}
 		}
 
-		private String fit(String text, float max) {
-			if (paint.measureText(text) <= max) {
-				return text;
+		// A card as the game draws it: type and cost on top, the illustration, the name on a dark
+		// strip, then the short text; the selected one rises, with the game's cursor over it.
+		private void drawGameCard(Canvas canvas, int id, RectF r0, boolean sel) {
+			Context ctx = getContext();
+			int type = types != null ? types[id] : -1;
+			float lift = sel ? DuoUi.dp(ctx, 8) : 0;
+			RectF r = new RectF(r0.left, r0.top - lift, r0.right, r0.bottom - lift);
+			float radius = DuoUi.dp(ctx, 5);
+			float band = Math.max(DuoUi.dp(ctx, 5), r.width() * 0.05f);
+			drawFace(canvas, r, paint, radius, band, typeColor(type));
+
+			float inner = DuoUi.dp(ctx, 5);
+			float left = r.left + inner, right = r.right - band - inner / 2;
+			float iw = right - left;
+			float headH = Math.min(r.height() * 0.12f, iw * 0.15f);
+			paint.setTypeface(condensed);
+			paint.setColor(CARD_INK);
+			paint.setTextAlign(Paint.Align.LEFT);
+			paint.setTextSize(headH * 0.8f);
+			canvas.drawText(typeName(type), left, r.top + inner + headH * 0.78f, paint);
+
+			float artTop = r.top + inner + headH + DuoUi.dp(ctx, 2);
+			float artH = Math.min(iw * 72f / 112f, r.height() * 0.5f);
+			rect.set(left, artTop, right, artTop + artH);
+			Bitmap bmp = illustration(id);
+			if (bmp != null) {
+				drawCover(canvas, bmp, rect, paint);
+			} else {
+				paint.setColor(0xFF9A9C9E);
+				canvas.drawRect(rect, paint);
 			}
-			int n = text.length();
-			while (n > 1 && paint.measureText(text, 0, n) + paint.measureText("…") > max) {
-				n--;
+			if (costs != null) {
+				String cost = String.valueOf(costs[id]);
+				paint.setTextAlign(Paint.Align.RIGHT);
+				paint.setTextSize(headH * 1.7f);
+				float cy = r.top + inner + headH * 1.35f;
+				paint.setStyle(Paint.Style.STROKE);
+				paint.setStrokeWidth(headH * 0.18f);
+				paint.setColor(CARD_FACE_TOP);
+				canvas.drawText(cost, right, cy, paint);
+				paint.setStyle(Paint.Style.FILL);
+				paint.setColor(CARD_INK);
+				canvas.drawText(cost, right, cy, paint);
 			}
-			return text.substring(0, n) + "…";
+
+			float bannerH = Math.max(headH * 1.05f, DuoUi.dp(ctx, 14));
+			RectF banner = new RectF(left, artTop + artH, right, artTop + artH + bannerH);
+			drawBanner(canvas, paint, banner, cardName(id));
+
+			String info = text(TEXT_SHORT + id);
+			if (info != null) {
+				paint.setTypeface(Typeface.create("sans-serif-condensed", Typeface.NORMAL));
+				float lineSize = Math.min(DuoUi.dp(ctx, 14), headH * 0.95f);
+				paint.setTextSize(lineSize);
+				paint.setColor(CARD_INK);
+				paint.setTextAlign(Paint.Align.LEFT);
+				float y = banner.bottom + DuoUi.dp(ctx, 2);
+				for (String line : info.split("\n")) {
+					y += lineSize * 1.2f;
+					if (y > r.bottom - inner / 2) {
+						break;
+					}
+					canvas.drawText(fit(paint, line, iw), left, y, paint);
+				}
+				paint.setTypeface(condensed);
+			}
+
+			if (sel) {
+				paint.setStyle(Paint.Style.STROKE);
+				float stroke = DuoUi.dp(ctx, 3);
+				paint.setStrokeWidth(stroke);
+				paint.setColor(0xFFFFFFFF);
+				rect.set(r);
+				rect.inset(stroke / 2, stroke / 2);
+				canvas.drawRoundRect(rect, radius, radius, paint);
+				paint.setStyle(Paint.Style.FILL);
+				// The game's cursor: a triangle pointing down at the card.
+				float t = DuoUi.dp(ctx, 9);
+				float cx = r.centerX();
+				path.reset();
+				path.moveTo(cx - t, r.top - t * 1.4f);
+				path.lineTo(cx + t, r.top - t * 1.4f);
+				path.lineTo(cx, r.top - t * 0.2f);
+				path.close();
+				paint.setColor(0xFFFFFFFF);
+				canvas.drawPath(path, paint);
+			}
 		}
 	}
 }

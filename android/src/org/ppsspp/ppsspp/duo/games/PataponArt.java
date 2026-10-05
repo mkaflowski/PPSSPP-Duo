@@ -110,12 +110,12 @@ final class PataponArt {
 		cb.onArt(null);
 	}
 
-	private interface Bytes {
+	interface Bytes {
 		void on(byte[] data);
 	}
 
 	// readGameFile in 1 MB pieces.
-	private static void readRange(DuoModContext host, String path, int offset, int size, Bytes done) {
+	static void readRange(DuoModContext host, String path, int offset, int size, Bytes done) {
 		ByteArrayOutputStream acc = new ByteArrayOutputStream(size);
 		readNext(host, path, offset, size, acc, done);
 	}
