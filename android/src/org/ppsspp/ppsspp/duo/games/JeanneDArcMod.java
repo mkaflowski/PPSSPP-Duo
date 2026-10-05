@@ -96,6 +96,8 @@ public final class JeanneDArcMod extends DuoMod {
 
 	static final class Unit {
 		String name;
+		// Record index, which stays the unit's for the battle.
+		int slot;
 		int side, character, portrait, level, exp, hp, maxHp, mp, maxMp;
 		Bitmap face;
 
@@ -104,7 +106,7 @@ public final class JeanneDArcMod extends DuoMod {
 		}
 
 		String signature() {
-			return name + side + "," + System.identityHashCode(face) + "," + level + "," + exp + "," + hp + "/" + maxHp + "," + mp + "/" + maxMp + ";";
+			return slot + ":" + name + side + "," + System.identityHashCode(face) + "," + level + "," + exp + "," + hp + "/" + maxHp + "," + mp + "/" + maxMp + ";";
 		}
 	}
 
@@ -183,6 +185,7 @@ public final class JeanneDArcMod extends DuoMod {
 			for (int i = 0; i < UNITS_PER_WATCH; i++) {
 				Unit u = parse(b, i * UNIT_SIZE);
 				if (u != null) {
+					u.slot = w * UNITS_PER_WATCH + i;
 					u.face = portrait(u.portrait, canLoad);
 					if (u.face == null && hasFailed(KIND_BUST, u.portrait) && hasFailed(KIND_SMALL, u.portrait)) {
 						u.face = portrait(u.character, canLoad);
@@ -365,9 +368,118 @@ public final class JeanneDArcMod extends DuoMod {
 		private final Rect src = new Rect();
 		private JeanneArt art;
 		private int turn;
+		private final List<Unit> all = new ArrayList<>();
 		private final List<Unit> party = new ArrayList<>();
 		private final List<Unit> enemies = new ArrayList<>();
 		private String signature = "";
+
+		// A hit shakes the card and drains the lost part of the bar. A unit that falls turns gray
+		// after the shake, then its card slides to the bottom of the column while the ones below
+		// move up (like RecyclerView's item animations).
+		private static final long SHAKE_MS = 450;
+		private static final long BAR_DELAY_MS = 150;
+		private static final long BAR_MS = 450;
+		private static final long GRAY_MS = 300;
+		private static final long MOVE_MS = 400;
+		private static final int COLOR_HIT = 0xFFE03C32;
+		private static final int COLOR_GHOST = 0xFFF4E6C8;
+
+		private static final class Bar {
+			float from, to;
+			long start = -1;
+
+			void set(float value, long now) {
+				from = shown(now);
+				to = value;
+				start = now;
+			}
+
+			// Eases from the old value to the new, after a moment (so a hit reads first).
+			float shown(long now) {
+				if (start < 0) {
+					return to;
+				}
+				float p = clamp((now - start - BAR_DELAY_MS) / (float)BAR_MS);
+				return from + (to - from) * (1 - (1 - p) * (1 - p));
+			}
+
+			boolean running(long now) {
+				return start >= 0 && now - start < BAR_DELAY_MS + BAR_MS;
+			}
+		}
+
+		private static final class Anim {
+			String name;
+			int hp, mp;
+			final Bar hpBar = new Bar(), mpBar = new Bar();
+			long shakeStart = -1;
+			// When the unit fell: -1 while it stands, 0 if it was already down when first seen.
+			long deadSince = -1;
+			boolean sunk;
+			float fromIndex, toIndex = -1;
+			long moveStart = -1;
+
+			float index(long now) {
+				if (moveStart < 0) {
+					return toIndex;
+				}
+				float p = clamp((now - moveStart) / (float)MOVE_MS);
+				// Ease in and out.
+				p = p * p * (3 - 2 * p);
+				return fromIndex + (toIndex - fromIndex) * p;
+			}
+
+			boolean moving(long now) {
+				return moveStart >= 0 && now - moveStart < MOVE_MS;
+			}
+
+			// 0 standing, 1 shown as defeated; the fade starts when the shake is over.
+			float deadness(long now) {
+				if (deadSince < 0) {
+					return 0;
+				}
+				if (deadSince == 0) {
+					return 1;
+				}
+				return clamp((now - deadSince - SHAKE_MS) / (float)GRAY_MS);
+			}
+
+			boolean shouldSink(long now) {
+				return deadSince == 0 || (deadSince > 0 && now - deadSince >= SHAKE_MS + GRAY_MS);
+			}
+
+			// Sideways offset, as a fraction of the amplitude.
+			float shake(long now) {
+				if (shakeStart < 0 || now - shakeStart >= SHAKE_MS) {
+					return 0;
+				}
+				float p = (now - shakeStart) / (float)SHAKE_MS;
+				return (float)Math.sin(p * Math.PI * 2 * 3.5) * (1 - p);
+			}
+
+			float hit(long now) {
+				if (shakeStart < 0 || now - shakeStart >= SHAKE_MS) {
+					return 0;
+				}
+				float p = 1 - (now - shakeStart) / (float)SHAKE_MS;
+				return p * p;
+			}
+
+			boolean active(long now) {
+				return hit(now) > 0 || hpBar.running(now) || mpBar.running(now) || moving(now)
+					|| (deadSince > 0 && !sunk);
+			}
+		}
+
+		private final Map<Integer, Anim> anims = new HashMap<>();
+
+		private static float clamp(float v) {
+			return Math.max(0, Math.min(1, v));
+		}
+
+		private static float frac(int value, int max) {
+			return max > 0 ? clamp(value / (float)max) : 0;
+		}
 
 		// Per column (party, enemies): where it is on screen, and how far it's scrolled.
 		private final RectF[] columns = {new RectF(), new RectF()};
@@ -406,19 +518,79 @@ public final class JeanneDArcMod extends DuoMod {
 			}
 			signature = sig.toString();
 			this.turn = turn;
+			long now = SystemClock.uptimeMillis();
+			all.clear();
+			if (units == null) {
+				anims.clear();
+				party.clear();
+				enemies.clear();
+				invalidate();
+				return;
+			}
+			all.addAll(units);
+			Map<Integer, Anim> kept = new HashMap<>();
+			for (Unit u : units) {
+				Anim a = anims.get(u.slot);
+				if (a == null || !a.name.equals(u.name)) {
+					// New to this view: shown as it is, nothing animates.
+					a = new Anim();
+					a.name = u.name;
+					a.hpBar.to = frac(u.hp, u.maxHp);
+					a.mpBar.to = frac(u.mp, u.maxMp);
+					a.deadSince = u.defeated() ? 0 : -1;
+				} else {
+					if (u.hp < a.hp) {
+						a.shakeStart = now;
+					}
+					if (u.hp != a.hp || frac(u.hp, u.maxHp) != a.hpBar.to) {
+						a.hpBar.set(frac(u.hp, u.maxHp), now);
+					}
+					if (u.mp != a.mp || frac(u.mp, u.maxMp) != a.mpBar.to) {
+						a.mpBar.set(frac(u.mp, u.maxMp), now);
+					}
+					if (u.defeated() && a.deadSince < 0) {
+						a.deadSince = now;
+					} else if (!u.defeated()) {
+						a.deadSince = -1;
+					}
+				}
+				a.hp = u.hp;
+				a.mp = u.mp;
+				kept.put(u.slot, a);
+			}
+			anims.clear();
+			anims.putAll(kept);
+			reorder(now);
+			invalidate();
+		}
+
+		// Guests and other allies go with the party. The defeated sink to the bottom, once they've
+		// been seen falling. A unit whose place changed moves there from where it's drawn now.
+		private void reorder(long now) {
 			party.clear();
 			enemies.clear();
-			if (units != null) {
-				// Guests and other allies go with the party. The defeated sink to the bottom.
-				for (int pass = 0; pass < 2; pass++) {
-					for (Unit u : units) {
-						if (u.defeated() == (pass == 1)) {
-							(u.side == SIDE_ENEMY ? enemies : party).add(u);
-						}
+			for (int pass = 0; pass < 2; pass++) {
+				for (Unit u : all) {
+					Anim a = anims.get(u.slot);
+					if (a.shouldSink(now) == (pass == 1)) {
+						(u.side == SIDE_ENEMY ? enemies : party).add(u);
 					}
 				}
 			}
-			invalidate();
+			for (int c = 0; c < 2; c++) {
+				List<Unit> column = c == 0 ? party : enemies;
+				for (int i = 0; i < column.size(); i++) {
+					Anim a = anims.get(column.get(i).slot);
+					a.sunk = a.shouldSink(now);
+					if (a.toIndex < 0) {
+						a.fromIndex = a.toIndex = i;
+					} else if (a.toIndex != i) {
+						a.fromIndex = a.index(now);
+						a.toIndex = i;
+						a.moveStart = now;
+					}
+				}
+			}
 		}
 
 		private float dp(float v) {
@@ -463,10 +635,24 @@ public final class JeanneDArcMod extends DuoMod {
 				canvas.drawText(ctx.getString(R.string.duo_jeanne_turn, turn), w / 2, pad + dp(24), paint);
 			}
 
+			long now = SystemClock.uptimeMillis();
+			for (Unit u : all) {
+				Anim a = anims.get(u.slot);
+				if (a.shouldSink(now) != a.sunk) {
+					reorder(now);
+					break;
+				}
+			}
 			float colW = (w - 2 * pad - gap) / 2;
 			float top = pad + headerH;
-			drawColumn(canvas, party, pad, top, colW, h - pad, true);
-			drawColumn(canvas, enemies, pad + colW + gap, top, colW, h - pad, false);
+			drawColumn(canvas, party, pad, top, colW, h - pad, true, now);
+			drawColumn(canvas, enemies, pad + colW + gap, top, colW, h - pad, false, now);
+			for (Unit u : all) {
+				if (anims.get(u.slot).active(now)) {
+					postInvalidateOnAnimation();
+					break;
+				}
+			}
 		}
 
 		private static int alive(List<Unit> units) {
@@ -479,7 +665,7 @@ public final class JeanneDArcMod extends DuoMod {
 			return n;
 		}
 
-		private void drawColumn(Canvas canvas, List<Unit> units, float x, float top, float colW, float bottom, boolean isParty) {
+		private void drawColumn(Canvas canvas, List<Unit> units, float x, float top, float colW, float bottom, boolean isParty, long now) {
 			Context ctx = getContext();
 			int col = isParty ? 0 : 1;
 			float titleH = dp(20);
@@ -521,17 +707,36 @@ public final class JeanneDArcMod extends DuoMod {
 			scroll[col] = Math.max(0, Math.min(maxScroll[col], scroll[col]));
 
 			canvas.save();
-			canvas.clipRect(x - 1, top, x + colW + 1, bottom);
-			float y = top - scroll[col];
-			for (Unit u : units) {
-				if (y + itemH >= top && y <= bottom) {
-					if (compact) {
-						drawRow(canvas, u, x, y, colW, itemH);
-					} else {
-						drawUnit(canvas, u, x, y, colW, itemH);
+			// Wider than the column, for the shake.
+			canvas.clipRect(x - dp(8), top, x + colW + dp(8), bottom);
+			// Cards on their way down go under the ones moving up.
+			for (int pass = 0; pass < 2; pass++) {
+				for (Unit u : units) {
+					Anim a = anims.get(u.slot);
+					boolean sinking = a.moving(now) && a.toIndex > a.fromIndex;
+					if (sinking != (pass == 0)) {
+						continue;
 					}
+					float y = top - scroll[col] + a.index(now) * (itemH + spacing);
+					if (y + itemH < top || y > bottom) {
+						continue;
+					}
+					float dx = a.shake(now) * dp(7);
+					canvas.save();
+					canvas.translate(dx, 0);
+					if (compact) {
+						drawRow(canvas, u, a, now, x, y, colW, itemH);
+					} else {
+						drawUnit(canvas, u, a, now, x, y, colW, itemH);
+					}
+					float hit = a.hit(now);
+					if (hit > 0) {
+						fill.setColor(COLOR_HIT);
+						fill.setAlpha((int)(110 * hit));
+						canvas.drawRect(x, y, x + colW, y + itemH, fill);
+					}
+					canvas.restore();
 				}
-				y += itemH + spacing;
 			}
 			canvas.restore();
 
@@ -564,8 +769,8 @@ public final class JeanneDArcMod extends DuoMod {
 			canvas.drawRect(x, y, x + w, y + dp(2), fill);
 		}
 
-		// Cropped to fill the box, keeping the top (the face).
-		private void drawPortrait(Canvas canvas, Bitmap face, RectF box, boolean dead) {
+		// Cropped to fill the box, keeping the top (the face). Fades to gray as deadness goes to 1.
+		private void drawPortrait(Canvas canvas, Bitmap face, RectF box, float deadness) {
 			fill.setColor(COLOR_WELL);
 			canvas.drawRect(box, fill);
 			if (face != null) {
@@ -577,8 +782,16 @@ public final class JeanneDArcMod extends DuoMod {
 				} else {
 					src.set(0, 0, bw, Math.round(bw / aspect));
 				}
-				facePaint.setColorFilter(dead ? grayscale : null);
-				facePaint.setAlpha(dead ? 150 : 255);
+				if (deadness <= 0) {
+					facePaint.setColorFilter(null);
+				} else if (deadness >= 1) {
+					facePaint.setColorFilter(grayscale);
+				} else {
+					ColorMatrix m = new ColorMatrix();
+					m.setSaturation(1 - deadness);
+					facePaint.setColorFilter(new ColorMatrixColorFilter(m));
+				}
+				facePaint.setAlpha((int)(255 - 105 * deadness));
 				canvas.drawBitmap(face, src, box, facePaint);
 			}
 			paint.setStyle(Paint.Style.STROKE);
@@ -589,8 +802,7 @@ public final class JeanneDArcMod extends DuoMod {
 		}
 
 		// The beige plate with the unit's name in the game's serif.
-		private void drawNamePlate(Canvas canvas, Unit u, RectF where, float reserveRight) {
-			boolean dead = u.defeated();
+		private void drawNamePlate(Canvas canvas, Unit u, boolean dead, RectF where, float reserveRight) {
 			if (art != null) {
 				art.namePlate(canvas, where, dead ? dimGlyphPaint : glyphPaint);
 			} else {
@@ -637,8 +849,9 @@ public final class JeanneDArcMod extends DuoMod {
 			canvas.drawText("GUEST", right, where.centerY() + h * 0.35f, paint);
 		}
 
-		private void drawUnit(Canvas canvas, Unit u, float x, float y, float w, float h) {
-			boolean dead = u.defeated();
+		private void drawUnit(Canvas canvas, Unit u, Anim a, long now, float x, float y, float w, float h) {
+			float deadness = a.deadness(now);
+			boolean dead = deadness >= 0.5f;
 			drawPanel(canvas, x, y, w, h);
 			float inset = dp(6);
 
@@ -647,19 +860,19 @@ public final class JeanneDArcMod extends DuoMod {
 			float pw = Math.min(ph * 0.75f, w * 0.3f);
 			float px = x + inset, py = y + inset + dp(2);
 			rect.set(px, py, px + pw, py + ph);
-			drawPortrait(canvas, u.face, rect, dead);
+			drawPortrait(canvas, u.face, rect, deadness);
 			float lvH = Math.min(dp(17), ph * 0.18f);
 			float shadeTop = py + ph - lvH * 2.4f;
 			fill.setShader(new LinearGradient(0, shadeTop, 0, py + ph - lvH * 1.2f, 0x00000000, 0xE8000000, Shader.TileMode.CLAMP));
 			canvas.drawRect(px + dp(1), shadeTop, px + pw - dp(1), py + ph - dp(1), fill);
 			fill.setShader(null);
-			drawLevel(canvas, u, px + dp(4), py + ph - lvH - dp(3), lvH, px + pw - dp(4));
+			drawLevel(canvas, u, dead, px + dp(4), py + ph - lvH - dp(3), lvH, px + pw - dp(4));
 
 			float left = px + pw + dp(8);
 			float right = x + w - inset;
 			float plateH = Math.min(dp(28), h * 0.26f);
 			plate.set(left, py, right, py + plateH);
-			drawNamePlate(canvas, u, plate, guestWidth(u, plate.height()));
+			drawNamePlate(canvas, u, dead, plate, guestWidth(u, plate.height()));
 			if (isGuest(u)) {
 				drawGuest(canvas, plate);
 			}
@@ -671,19 +884,25 @@ public final class JeanneDArcMod extends DuoMod {
 			int rows = showMp ? 2 : 1;
 			float rowH = (rowsBottom - rowsTop - (rows - 1) * rowGap) / rows;
 			int[] hpColors = dead ? DEFEATED : u.side == SIDE_ENEMY ? HP_ENEMY : HP_PLAYER;
-			drawStat(canvas, JeanneArt.HP, "HP", u.hp, u.maxHp, hpColors, dead, left, rowsTop, right, rowH);
+			drawStat(canvas, JeanneArt.HP, "HP", u.hp, u.maxHp, a.hpBar.shown(now), hpColors, dead, left, rowsTop, right, rowH);
 			if (showMp) {
-				drawStat(canvas, JeanneArt.MP, "MP", u.mp, u.maxMp, dead ? DEFEATED : MP, dead, left, rowsTop + rowH + rowGap, right, rowH);
+				drawStat(canvas, JeanneArt.MP, "MP", u.mp, u.maxMp, a.mpBar.shown(now), dead ? DEFEATED : MP, dead,
+					left, rowsTop + rowH + rowGap, right, rowH);
 			}
-			if (dead) {
+			drawDim(canvas, deadness, x, y, w, h);
+		}
+
+		private void drawDim(Canvas canvas, float deadness, float x, float y, float w, float h) {
+			if (deadness > 0) {
 				fill.setColor(COLOR_DIM);
+				fill.setAlpha((int)((COLOR_DIM >>> 24) * deadness));
 				canvas.drawRect(x, y, x + w, y + h, fill);
 			}
 		}
 
 		// "Lv n", n in the small digits.
-		private void drawLevel(Canvas canvas, Unit u, float x, float top, float h, float maxRight) {
-			Paint gp = u.defeated() ? dimGlyphPaint : glyphPaint;
+		private void drawLevel(Canvas canvas, Unit u, boolean dead, float x, float top, float h, float maxRight) {
+			Paint gp = dead ? dimGlyphPaint : glyphPaint;
 			if (art != null) {
 				float lw = art.label(canvas, JeanneArt.LV, x, top, h, gp);
 				float nx = x + lw + h * 0.3f;
@@ -698,9 +917,10 @@ public final class JeanneDArcMod extends DuoMod {
 			canvas.drawText(getContext().getString(R.string.duo_jeanne_level, u.level), x, top + h * 0.85f, paint);
 		}
 
-		// One status row: label, value / max in the big digits, and the bar under them.
-		private void drawStat(Canvas canvas, Rect label, String fallback, int value, int max, int[] colors, boolean dead,
-				float left, float top, float right, float rowH) {
+		// One status row: label, value / max in the big digits, and the bar under them. shown is
+		// the bar's animated fill: above the value, the difference is a hit draining away.
+		private void drawStat(Canvas canvas, Rect label, String fallback, int value, int max, float shown, int[] colors,
+				boolean dead, float left, float top, float right, float rowH) {
 			fill.setShader(new LinearGradient(0, top, 0, top + rowH, COLOR_ROW_TOP, COLOR_ROW_BOTTOM, Shader.TileMode.CLAMP));
 			canvas.drawRect(left, top, right, top + rowH, fill);
 			fill.setShader(null);
@@ -754,7 +974,12 @@ public final class JeanneDArcMod extends DuoMod {
 			}
 			fill.setColor(COLOR_TRACK);
 			canvas.drawRect(barLeft, barBottom - barH, x1, barBottom, fill);
-			float frac = max > 0 ? Math.max(0, Math.min(1, value / (float)max)) : 0;
+			float target = frac(value, max);
+			if (shown > target) {
+				fill.setColor(COLOR_GHOST);
+				canvas.drawRect(barLeft + (x1 - barLeft) * target, barBottom - barH, barLeft + (x1 - barLeft) * shown, barBottom, fill);
+			}
+			float frac = Math.min(target, shown);
 			if (frac > 0) {
 				float end = barLeft + Math.max(dp(2), (x1 - barLeft) * frac);
 				fill.setShader(new LinearGradient(barLeft, 0, x1, 0, colors[0], colors[1], Shader.TileMode.CLAMP));
@@ -767,14 +992,15 @@ public final class JeanneDArcMod extends DuoMod {
 		}
 
 		// One line: portrait, name plate, then HP.
-		private void drawRow(Canvas canvas, Unit u, float x, float y, float w, float h) {
-			boolean dead = u.defeated();
+		private void drawRow(Canvas canvas, Unit u, Anim a, long now, float x, float y, float w, float h) {
+			float deadness = a.deadness(now);
+			boolean dead = deadness >= 0.5f;
 			drawPanel(canvas, x, y, w, h);
 			float inset = dp(4);
 			float ps = h - 2 * inset - dp(2);
 			float px = x + inset, py = y + inset + dp(2);
 			rect.set(px, py, px + ps, py + ps);
-			drawPortrait(canvas, u.face, rect, dead);
+			drawPortrait(canvas, u.face, rect, deadness);
 			float left = px + ps + dp(6);
 			float right = x + w - inset;
 			float nameW = (right - left) * 0.5f;
@@ -782,16 +1008,13 @@ public final class JeanneDArcMod extends DuoMod {
 			float plateH = Math.min(ps, dp(24));
 			plate.top = py + (ps - plateH) / 2;
 			plate.bottom = plate.top + plateH;
-			drawNamePlate(canvas, u, plate, guestWidth(u, plateH));
+			drawNamePlate(canvas, u, dead, plate, guestWidth(u, plateH));
 			if (isGuest(u)) {
 				drawGuest(canvas, plate);
 			}
 			int[] hpColors = dead ? DEFEATED : u.side == SIDE_ENEMY ? HP_ENEMY : HP_PLAYER;
-			drawStat(canvas, JeanneArt.HP, "HP", u.hp, u.maxHp, hpColors, dead, left + nameW + dp(6), py, right, ps);
-			if (dead) {
-				fill.setColor(COLOR_DIM);
-				canvas.drawRect(x, y, x + w, y + h, fill);
-			}
+			drawStat(canvas, JeanneArt.HP, "HP", u.hp, u.maxHp, a.hpBar.shown(now), hpColors, dead, left + nameW + dp(6), py, right, ps);
+			drawDim(canvas, deadness, x, y, w, h);
 		}
 
 		private int columnAt(float x, float y) {
