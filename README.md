@@ -40,7 +40,7 @@ When one of these games starts, its mod opens on the second screen by itself.
 | **Grand Theft Auto: Liberty City Stories** | Map | The whole city map (built from the game's own radar), your position and heading, the route you drove, mission targets and destinations, heading-up rotation | ULES00151 v3.00 (EU) |
 | **Lumines: Puzzle Fusion** | Lumines | Big preview of the next blocks, score, high score, squares deleted, time and how full the board is | ULES00043 v1.01 (EU) |
 | **Gran Turismo** | Telemetry | Speed, tachometer with the car's red line, gear, throttle and brake in the game's own HUD style, your car's picture, and the whole track with its logo and every car on it (or a plain look) | UCES01245 v2.00 (EU) |
-| **Metal Gear Ac!d** | Cards | Your hand of cards as the game draws them (with their illustrations, or a plain look), big and readable, with the full text of the card under the cursor; tap a card to move the game's cursor to it. Snake's life, deck, cost and turn | ULUS10006 v1.00 (US) |
+| **Metal Gear Ac!d** | Cards | Your hand of cards as the game draws them (with their illustrations), big and readable, with the full text of the card under the cursor; tap a card to move the game's cursor to it. Snake's life, deck, cost and turn | ULUS10006 v1.00 (US) |
 | **Jeanne d'Arc** | Battle | Your party and the enemies with the game's portraits, HP, MP and level (the defeated in black and white), and the turn number | UCUS98700 v1.00 (US) |
 
 Other releases of these games are recognized too, and the mods look up the game data at runtime

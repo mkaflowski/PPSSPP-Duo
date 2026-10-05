@@ -101,9 +101,9 @@ public final class MyMod extends DuoMod {
 - **Cards** (Metal Gear Ac!d, ULUS10006 v1.00): the hand with each card's type, cost and short
   text, the full text of the card under the cursor, Snake's life, deck, cost and turn. Tapping a
   card moves the game's cursor to it (left/right presses, only while the game waits for a card from
-  the hand, and only as long as each press moves the cursor). The game look draws the cards as the
-  game does, with their illustrations from `resident.qar` in `stage/init/_zar`, read at runtime and
-  cached (see `MgaArt`); a button switches to a plain look. The hand, Snake and the status panel are
+  the hand, and only as long as each press moves the cursor). The cards are drawn as the game does,
+  with their illustrations from `resident.qar` in `stage/init/_zar`, read at runtime and cached
+  (see `MgaArt`). The hand, Snake and the status panel are
   found by the code pointers they hold; card records and the battle phase are static, names and
   texts come from the string table in `stage/com/_zar` (see `MetalGearAcidMod`).
 - **Screen off**: black, tab bar hidden.
