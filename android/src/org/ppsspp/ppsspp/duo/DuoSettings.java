@@ -12,6 +12,8 @@ public final class DuoSettings {
 	private static final String KEY_GAME_MOD_PREFIX = "game_mod.";
 	private static final String KEY_REMEMBER_PER_GAME = "remember_per_game";
 	private static final String KEY_HAPTICS = "haptics";
+	private static final String KEY_IMMERSIVE = "immersive";
+	private static final String KEY_GESTURE_HINT_SHOWN = "gesture_hint_shown";
 	private static final String KEY_PREFERRED_DISPLAY = "preferred_display";
 
 	private final SharedPreferences prefs;
@@ -57,6 +59,24 @@ public final class DuoSettings {
 
 	public void setHaptics(boolean value) {
 		prefs.edit().putBoolean(KEY_HAPTICS, value).apply();
+	}
+
+	// Tab bar hidden, brought back with a swipe in from a side edge.
+	public boolean getImmersive() {
+		return prefs.getBoolean(KEY_IMMERSIVE, true);
+	}
+
+	public void setImmersive(boolean value) {
+		prefs.edit().putBoolean(KEY_IMMERSIVE, value).apply();
+	}
+
+	// Whether the user has dismissed the explanation of the back gesture.
+	public boolean getGestureHintShown() {
+		return prefs.getBoolean(KEY_GESTURE_HINT_SHOWN, false);
+	}
+
+	public void setGestureHintShown(boolean value) {
+		prefs.edit().putBoolean(KEY_GESTURE_HINT_SHOWN, value).apply();
 	}
 
 	// Display name, or "" for automatic.

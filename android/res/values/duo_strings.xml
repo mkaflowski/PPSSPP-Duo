@@ -7,6 +7,11 @@
     <string name="duo_settings_general">General</string>
     <string name="duo_setting_remember_per_game">Remember the chosen mod for each game</string>
     <string name="duo_setting_haptics">Haptic feedback</string>
+    <string name="duo_setting_immersive">Immersive mode</string>
+    <string name="duo_setting_immersive_desc">Hide the tabs on screens made for the running game. Swipe in from the middle of the left or right edge to bring them back, like Android\'s back gesture</string>
+    <string name="duo_gesture_hint_title">The tabs are hidden</string>
+    <string name="duo_gesture_hint_text">Swipe in from the middle of the left or right edge (where it\'s marked) to bring them back. Immersive mode can be turned off in the second screen settings.</string>
+    <string name="duo_gesture_hint_ok">Got it</string>
     <string name="duo_settings_default_mod">Default mod</string>
     <string name="duo_settings_display">Display</string>
     <string name="duo_setting_display_auto">Automatic</string>

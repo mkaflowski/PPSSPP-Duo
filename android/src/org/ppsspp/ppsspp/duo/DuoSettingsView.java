@@ -56,6 +56,13 @@ final class DuoSettingsView extends ScrollView {
 		header(ctx.getString(R.string.duo_settings_general));
 		toggle(ctx.getString(R.string.duo_setting_remember_per_game), settings.getRememberPerGame(), settings::setRememberPerGame);
 		toggle(ctx.getString(R.string.duo_setting_haptics), settings.getHaptics(), settings::setHaptics);
+		toggle(ctx.getString(R.string.duo_setting_immersive) + "\n" + ctx.getString(R.string.duo_setting_immersive_desc), settings.getImmersive(), value -> {
+			settings.setImmersive(value);
+			if (value) {
+				// Explain the gesture again.
+				settings.setGestureHintShown(false);
+			}
+		});
 
 		header(ctx.getString(R.string.duo_settings_default_mod));
 		for (DuoMod mod : mods) {

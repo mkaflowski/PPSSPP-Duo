@@ -7,6 +7,11 @@
     <string name="duo_settings_general">Ogólne</string>
     <string name="duo_setting_remember_per_game">Zapamiętuj wybrany mod dla każdej gry</string>
     <string name="duo_setting_haptics">Wibracje przy dotyku</string>
+    <string name="duo_setting_immersive">Tryb immersyjny</string>
+    <string name="duo_setting_immersive_desc">Ukrywa zakładki na ekranach przygotowanych dla uruchomionej gry. Przesuń palcem od środka lewej lub prawej krawędzi, żeby je przywrócić, jak gestem cofania w Androidzie</string>
+    <string name="duo_gesture_hint_title">Zakładki są ukryte</string>
+    <string name="duo_gesture_hint_text">Przesuń palcem od środka lewej lub prawej krawędzi (tam, gdzie zaznaczono), żeby je przywrócić. Tryb immersyjny możesz wyłączyć w ustawieniach drugiego ekranu.</string>
+    <string name="duo_gesture_hint_ok">Rozumiem</string>
     <string name="duo_settings_default_mod">Domyślny mod</string>
     <string name="duo_settings_display">Ekran</string>
     <string name="duo_setting_display_auto">Automatycznie</string>

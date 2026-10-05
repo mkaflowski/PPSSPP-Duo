@@ -22,8 +22,9 @@ public interface DuoModContext {
 	// Short haptic tick, if enabled in the settings.
 	void haptic(View view);
 
-	// Hides or shows the host's tab bar. When hidden, a tap near the top edge brings it back for a
-	// few seconds.
+	// Hides or shows the host's tab bar. When hidden, a tap near the top edge or a swipe in from the
+	// middle of a side edge brings it back for a few seconds. In immersive mode (game mods only) the
+	// bar is hidden either way and only the swipe works.
 	void setTabBarVisible(boolean visible);
 
 	// Input to the emulator. Presses are only applied while a game is in the foreground.

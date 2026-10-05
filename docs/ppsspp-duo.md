@@ -31,7 +31,18 @@ DuoNative (JNI) ── android/jni/DuoBridge.cpp ── DuoBridge_OnFrame() on t
   older than 0.5 s are dropped; releases never are. Status, button presses and memory watches are
   copied between frames, so the UI thread never reads live emulator state.
 - Master switch: `g_Config.bDualScreen` (Settings > System > "Use second screen"). Mod choices
-  live in SharedPreferences (`DuoSettings`): default mod, remembered mod per game, haptics, display.
+  live in SharedPreferences (`DuoSettings`): default mod, remembered mod per game, haptics,
+  immersive mode, display.
+- Immersive mode (on by default): a mod made for the running game (priority above 0) gets the
+  whole screen, the tab bar is hidden. The generic mods and the settings keep their tabs. A swipe
+  in from the middle of the left or right edge shows the tabs for 4 s or hides them again; the
+  first time, an overlay explains it. The mod sees the touch until the swipe is recognized, then
+  gets `ACTION_CANCEL`.
+- The second screen has its own system back gesture, which takes edge swipes before the window
+  sees them and sends the back to whatever has focus (never the Presentation, which can't take
+  focus). While the tabs are hidden or the settings are open (the swipe closes them), the middle 200dp of both side edges (the most Android
+  allows) is excluded from it with `setSystemGestureExclusionRects`; swipes elsewhere still go to
+  the system.
 
 ## Writing a mod
 
@@ -63,7 +74,7 @@ public final class MyMod extends DuoMod {
 | `findMemory(start, end, offsets[], values[], cb)` | Signature scan (u32 values at given offsets), one per frame. Use it instead of fixed addresses so other releases work. |
 | `readGameFile(path, offset, size, cb)` | Up to 1 MB from `disc0:/...`, one request per frame, on the emu thread. |
 | `getStatus()` / `getGameIcon()` | Game ID, title, FPS, speed, save slot, pause state. |
-| `setTabBarVisible(false)` | Full-screen mods. A tap on the top edge shows the tabs for 4 s. |
+| `setTabBarVisible(false)` | Full-screen mods. A tap on the top edge or a swipe in from the middle of a side edge shows the tabs for 4 s. |
 | `haptic(view)` | Respects the haptics setting. |
 
 `DiagnosticsMod` is the reference for memory reads, `PataponMod` for game-specific mods.
