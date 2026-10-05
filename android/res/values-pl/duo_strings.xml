@@ -84,7 +84,6 @@
     <string name="duo_jeanne_party">DRUŻYNA</string>
     <string name="duo_jeanne_enemies">WROGOWIE</string>
     <string name="duo_jeanne_level">Poz. %1$d</string>
-    <string name="duo_jeanne_defeated">Pokonany</string>
     <string name="duo_mod_mga">Karty</string>
     <string name="duo_mod_mga_desc">Metal Gear Ac!d: karty na ręce z grafiką i pełnym opisem (dotknięcie wybiera kartę w grze), życie Snake\'a, talia, koszt i tura</string>
     <string name="duo_mga_idle">Zacznij misję, żeby zobaczyć karty</string>

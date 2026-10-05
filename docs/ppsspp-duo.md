@@ -94,8 +94,11 @@ public final class MyMod extends DuoMod {
   switches to a plain look. The cars, telemetry and map are found by signature scans every race
   (see `GranTurismoMod`).
 - **Battle** (Jeanne d'Arc, UCUS98700 v1.00): portrait, HP, MP and level of the party and the
-  enemies (defeated ones in grayscale), with the turn number. The portraits are the game's own,
-  decoded from `DATA/FACE/MFACE*.GIM` on the disc (see `GimImage`). The battle state is in the
+  enemies (defeated ones in grayscale, guests tagged), with the turn number, drawn like the game's
+  status window. The busts, the lettering (digits, HP, MP, TURN, Lv, PLAYER, ENEMY, GUEST) and the
+  name plate are the game's own, decoded at runtime from `DATA/FACE/AF*_00.GIM` (with
+  `MFACE*.GIM` as the fallback) and `DATA/GUI/MENU04.GIM` / `MENU01.GIM` on the disc (see
+  `GimImage`, `JeanneArt`). The battle state is in the
   main module's data, so it's read from fixed addresses (see `JeanneDArcMod`); other releases
   aren't supported. Columns with many units switch to one-line rows, then scroll.
 - **Cards** (Metal Gear Ac!d, ULUS10006 v1.00): the hand with each card's type, cost and short

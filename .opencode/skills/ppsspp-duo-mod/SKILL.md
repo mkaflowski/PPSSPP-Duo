@@ -1,6 +1,6 @@
 ---
 name: ppsspp-duo-mod
-description: Use when building or fixing a PPSSPP Duo second-screen mod for a PSP game (DuoMod, games/*Mod.java, GranTurismoMod, PataponMod, GtaLcsMapMod, LuminesMod), when reverse engineering a PSP game's memory or disc files for one (signature scans, RAM dumps, texture or archive formats), when testing on the AYN Thor over adb and the WebSocket debugger, or when releasing a new PPSSPP Duo version.
+description: Use when building or fixing a PPSSPP Duo second-screen mod for a PSP game (DuoMod, games/*Mod.java, GranTurismoMod, PataponMod, GtaLcsMapMod, LuminesMod, MetalGearAcidMod, JeanneDArcMod), when reverse engineering a PSP game's memory or disc files for one (signature scans, RAM dumps, texture or archive formats), when testing on the AYN Thor over adb and the WebSocket debugger, or when releasing a new PPSSPP Duo version.
 ---
 
 # Building a PPSSPP Duo game mod
@@ -23,6 +23,7 @@ Tools live in `Tools/duo/` (Python 3 + `pip install websocket-client pillow nump
 | `nav.py cross:10 w3 right ...` | Press buttons, wait, screenshot (drive menus) |
 | `memscan.py` | `value`, `text`, `diff`, `matrices`, `motion`, `compare`, `sig` searches in RAM |
 | `formats/gt_vol.py`, `formats/txs3.py` | Gran Turismo archive and texture decoders (models for new formats) |
+| `formats/gim.py`, `formats/spf.py` | GIM to PNG (as `GimImage`), Jeanne d'Arc's SPF packs (list, extract) |
 | `release.py VERSION notes.md` | GitHub release with the APK |
 
 Screenshots and dumps go to `Tools/duo/out/` (ignored by git).
@@ -35,8 +36,10 @@ Screenshots and dumps go to `Tools/duo/out/` (ignored by git).
    the next pieces, a hand of cards, telemetry. Look at the in-game HUD and menus for the values.
 3. **Find the data in RAM** (below). Prefer things the game itself displays, so they can be checked.
 4. **Find the art on the disc** (below) if the mod should look like the game.
-5. **Write the mod** (conventions below), with a plain look first; the game look on top of it, with a
-   button to switch, like `PataponMod` and `GranTurismoMod`.
+5. **Write the mod** (conventions below). Older mods have a plain look and a game look with a button
+   to switch (`PataponMod`, `GranTurismoMod`); the user prefers the game look only for new ones
+   (`MetalGearAcidMod`, `JeanneDArcMod`), with plain drawing just as the fallback when the art
+   can't be read.
 6. **Test on the device** against what the game shows, on two different sessions (another track,
    level or save). Take full-size screenshots of the second screen for the README.
 7. **Document**: README table row (game, mod, what it shows, tested version) and screenshot (620x540,
@@ -58,7 +61,10 @@ Screenshots and dumps go to `Tools/duo/out/` (ignored by git).
   off. Menus with animated cursors need `cross:10` and 3 s waits; screenshot after each block of
   steps, menus drift by one step easily.
 - Installing a new APK kills the game: batch code changes, then reinstall and drive back in. Write
-  the menu path down as a `nav.py` line once it works.
+  the menu path down as a `nav.py` line once it works. Quicker: keep a savestate in slot 1 and load
+  it from the Dashboard tab (`input -d 4 tap 128 56`, then `555 478`).
+- States that are hard to reach in the game (many units, a defeated one, a guest) can be faked
+  with `memory.write` on the data the mod reads, to test the layouts; load the savestate after.
 - Logs: tag `PPSSPPDuo` (`adb logcat -d -s PPSSPPDuo:*`). Log what the mod found (addresses, names)
   once, not per frame.
 
@@ -90,6 +96,8 @@ version; game objects are on the heap and move per race/level/boot.
 - **Duplicates**: when there are several copies of a block, pick the live one by its values (GT
   telemetry has three copies and which are live varies per race).
 - Validate against the game's own display, then on a second run, before building UI on it.
+- Memory breakpoints (`memory.breakpoint.add read=true`) didn't trip on the Thor (ARM64 JIT), even
+  for a fixed address the game reads every frame; diffing dumps works there.
 
 Per frame the host copies up to 16 watched ranges of 16 KB each (`setMemoryWatches`); read them in
 `onStatus` with `readMemoryWatch(i)` and re-check the signature fields every time (objects die
@@ -105,7 +113,12 @@ when a race ends: then search again).
 - Prototype the decoder in Python in `Tools/duo/formats/` against the mounted ISO, check the PNGs,
   then port to Java. Existing decoders: `PataponArt` (BND, GXT), `GimImage` (GIM), `GtVolume`
   (GT.VOL), `Txs3` (TXS3 with swizzle, CLUT4/8, DXT3/5), `GtaRadar`, `MgaArt` (Konami _zar, QAR,
-  TXP; prototype in `formats/mga_txp.py`).
+  TXP; prototype in `formats/mga_txp.py`), `JeanneArt` (glyphs and window parts cut from GIM
+  atlases).
+- A game's HUD lettering (digits, labels) is usually in a GUI atlas: decode them all to PNG, find
+  the glyphs, and measure their boxes from the alpha channel (column and row sums), not by eye.
+  Drawing a sub-rectangle with filtering samples one pixel beyond it, so leave an empty pixel on
+  each side or a sliver of the neighbor shows.
 - PSP texture facts that cost time: swizzle is 16 bytes x 8 rows blocks; rows are padded to the
   power of two above the width in some formats (TXS3) and not in others (MGA's TXP: take the
   stride from the data size); PSP DXT blocks put the colour indices first, then two RGB565 colours,
@@ -153,9 +166,10 @@ when a race ends: then search again).
 
 1. Bump `duoVersionName` / `duoVersionCode` in `android/build.gradle.kts`, commit "PPSSPP Duo X.Y.Z".
 2. `git tag -a duo-vX.Y.Z -m "PPSSPP Duo X.Y.Z"`; tags are `duo-v*` so they don't mix with upstream's.
-3. Build **twice**, then check the version inside the native lib (the first build after a tag still
-   carries the previous `git describe`): search `lib/arm64-v8a/libppsspp_jni.so` in the APK for
-   `duo-vX.Y.Z`, and `aapt dump badging` for versionCode/versionName.
+3. Build, then check the version inside the native lib, and **build again until it matches** (the
+   first builds after a tag can still carry the previous `git describe`; 0.7.0 took three): search
+   `lib/arm64-v8a/libppsspp_jni.so` in the APK for `duo-vX.Y.Z`, and `aapt dump badging` for
+   versionCode/versionName.
 4. `git push duo ppsspp-duo:main` and `git push duo duo-vX.Y.Z`.
 5. Notes in English (what's new per game, install line, "Based on PPSSPP ... Games are not
    included"), then `python Tools/duo/release.py X.Y.Z notes.md`.

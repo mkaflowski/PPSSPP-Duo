@@ -84,7 +84,6 @@
     <string name="duo_jeanne_party">PARTY</string>
     <string name="duo_jeanne_enemies">ENEMIES</string>
     <string name="duo_jeanne_level">Lv %1$d</string>
-    <string name="duo_jeanne_defeated">Defeated</string>
     <string name="duo_mod_mga">Cards</string>
     <string name="duo_mod_mga_desc">Metal Gear Ac!d: your hand of cards with their art and full text (tap one to select it in the game), Snake\'s life, deck, cost and turn</string>
     <string name="duo_mga_idle">Start a mission to see your cards</string>
