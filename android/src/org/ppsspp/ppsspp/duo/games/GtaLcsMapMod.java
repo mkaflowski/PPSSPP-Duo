@@ -153,6 +153,7 @@ public final class GtaLcsMapMod extends DuoMod {
 		info.setBackground(DuoUi.rounded(ctx, 0xC0141A22, 10));
 		int pad = DuoUi.dp(ctx, 8);
 		info.setPadding(pad, pad / 2, pad, pad / 2);
+		info.setVisibility(View.GONE);
 		FrameLayout.LayoutParams infoLp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.START);
 		infoLp.setMargins(pad, pad, pad, pad);
 		root.addView(info, infoLp);
@@ -353,7 +354,7 @@ public final class GtaLcsMapMod extends DuoMod {
 	@Override
 	public void onStatus(DuoStatus s) {
 		if (!s.hasGame()) {
-			info.setText("");
+			setInfo("");
 			map.setPlayer(false, 0, 0, 0, 0);
 			return;
 		}
@@ -369,9 +370,15 @@ public final class GtaLcsMapMod extends DuoMod {
 		updateBlips();
 	}
 
+	// The label only carries messages, and goes away when there's none.
+	private void setInfo(String text) {
+		info.setText(text);
+		info.setVisibility(text.isEmpty() ? View.GONE : View.VISIBLE);
+	}
+
 	private void updatePlayer() {
 		if (pointerAddress == 0) {
-			info.setText(searching ? "" : host.getContext().getString(R.string.duo_gta_no_player));
+			setInfo(searching ? "" : host.getContext().getString(R.string.duo_gta_no_player));
 			map.setPlayer(false, 0, 0, 0, 0);
 			return;
 		}
@@ -396,13 +403,13 @@ public final class GtaLcsMapMod extends DuoMod {
 		}
 		ByteBuffer b = ByteBuffer.wrap(m).order(ByteOrder.LITTLE_ENDIAN);
 		float fx = b.getFloat(0x10), fy = b.getFloat(0x14);
-		float x = b.getFloat(0x30), y = b.getFloat(0x34), z = b.getFloat(0x38);
+		float x = b.getFloat(0x30), y = b.getFloat(0x34);
 		if (Float.isNaN(x) || Float.isNaN(y) || Math.abs(x) > 5000 || Math.abs(y) > 5000) {
 			map.setPlayer(false, 0, 0, 0, 0);
 			return;
 		}
 		map.setPlayer(true, x, y, fx, fy);
-		info.setText(String.format(Locale.US, "X %.0f  Y %.0f  Z %.0f", x, y, z));
+		setInfo("");
 	}
 
 	private void updateBlips() {

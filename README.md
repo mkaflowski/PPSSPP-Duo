@@ -53,7 +53,6 @@ Metal Gear Ac!d and WipEout Pure are the exceptions: their mods only support the
   <img src="docs/images/duo/gran_turismo.png" width="48%" alt="Gran Turismo telemetry">
   <img src="docs/images/duo/map.png" width="48%" alt="GTA LCS map">
   <img src="docs/images/duo/lumines.png" width="48%" alt="Lumines next blocks">
-  <img src="docs/images/duo/wipeout.png" width="48%" alt="WipEout Pure race">
 </p>
 
 ## Mods for every game
