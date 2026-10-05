@@ -42,16 +42,18 @@ When one of these games starts, its mod opens on the second screen by itself.
 | **Gran Turismo** | Telemetry | Speed, tachometer with the car's red line, gear, throttle and brake in the game's own HUD style, your car's picture, and the whole track with its logo and every car on it (or a plain look) | UCES01245 v2.00 (EU) |
 | **Metal Gear Ac!d** | Cards | Your hand of cards as the game draws them (with their illustrations), big and readable, with the full text of the card under the cursor; tap a card to move the game's cursor to it. Snake's life, deck, cost and turn | ULUS10006 v1.00 (US) |
 | **Jeanne d'Arc** | Battle | Your party and the enemies with HP, MP and level, and the turn number, drawn like the game's status window with its portraits and lettering (the defeated in black and white, guests tagged) | UCUS98700 v1.00 (US) |
+| **WipEout Pure** | Race | Position, lap, speed with the HUD's speed bar, shield energy, race and lap times (last and best), and a map of the track that draws itself from where every ship has been, all in the game's own HUD lettering | UCUS98612 v2.00 (US) |
 
 Other releases of these games are recognized too, and the mods look up the game data at runtime
-rather than relying on fixed addresses, but only the versions above have been tested. Jeanne d'Arc
-and Metal Gear Ac!d are the exceptions: their mods only support the US release.
+rather than relying on fixed addresses, but only the versions above have been tested. Jeanne d'Arc,
+Metal Gear Ac!d and WipEout Pure are the exceptions: their mods only support the US release.
 
 <p align="center">
   <img src="docs/images/duo/drums.png" width="48%" alt="Patapon drums">
   <img src="docs/images/duo/gran_turismo.png" width="48%" alt="Gran Turismo telemetry">
   <img src="docs/images/duo/map.png" width="48%" alt="GTA LCS map">
   <img src="docs/images/duo/lumines.png" width="48%" alt="Lumines next blocks">
+  <img src="docs/images/duo/wipeout.png" width="48%" alt="WipEout Pure race">
 </p>
 
 ## Mods for every game

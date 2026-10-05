@@ -120,6 +120,14 @@ public final class MyMod extends DuoMod {
   (see `MgaArt`). The hand, Snake and the status panel are
   found by the code pointers they hold; card records and the battle phase are static, names and
   texts come from the string table in `stage/com/_zar` (see `MetalGearAcidMod`).
+- **Race** (WipEout Pure, UCUS98612 v2.00): position, lap, speed, shield energy, race and lap times
+  (lap times are worked out from the race time when the lap changes), and a map of the track drawn
+  from the cells every ship has passed. The ships are a static array in the main module (8 x 0x1C0
+  at `0x08B72024`); the player's is the one with 0 at +0x84, and its controller (+0x144) leads to
+  the energy and, through the physics object, the speed. Drawn like the game's HUD with its own
+  lettering, the `FNT` font 0xD7B3DDA5 in `FE.wad`, read at runtime and cached (see
+  `WipeoutFont`: the WAD is a hash table of files; the font's palette grey levels are the alpha).
+  Other releases aren't supported.
 - **Screen off**: black, tab bar hidden.
 - **Diagnostics**: raw status, display info, memory dump.
 

@@ -95,6 +95,10 @@
     <string name="duo_mga_pick">Dotknij karty, żeby ją wybrać</string>
     <string name="duo_mga_information">Informacje</string>
     <string name="duo_mga_hand">RĘKA (%1$d)</string>
+    <string name="duo_mod_wipeout">Wyścig</string>
+    <string name="duo_mod_wipeout_desc">WipEout Pure: prędkość, energia osłony, pozycja, czasy okrążeń i mapa toru ze wszystkimi statkami</string>
+    <string name="duo_wipeout_idle">Zacznij wyścig, żeby zobaczyć telemetrię</string>
+    <string name="duo_wipeout_map_hint">Mapa toru rysuje się, gdy statki jadą</string>
 
     <string name="duo_mod_diagnostics">Diagnostyka</string>
     <string name="duo_mod_diagnostics_desc">Stan emulatora, informacje o ekranie i podgląd pamięci, dla twórców modów</string>

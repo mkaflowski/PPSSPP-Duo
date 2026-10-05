@@ -95,6 +95,10 @@
     <string name="duo_mga_pick">Tap a card to select it</string>
     <string name="duo_mga_information">Information</string>
     <string name="duo_mga_hand">HAND (%1$d)</string>
+    <string name="duo_mod_wipeout">Race</string>
+    <string name="duo_mod_wipeout_desc">WipEout Pure: speed, shield energy, position, lap times and a map of the track with every ship on it</string>
+    <string name="duo_wipeout_idle">Start a race to see the telemetry</string>
+    <string name="duo_wipeout_map_hint">The track map draws itself as the ships race</string>
 
     <string name="duo_mod_diagnostics">Diagnostics</string>
     <string name="duo_mod_diagnostics_desc">Emulator status, display info and a memory view, for mod developers</string>
