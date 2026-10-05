@@ -104,11 +104,23 @@ when a race ends: then search again).
   in the class comment and keep the license compatible (MIT is fine).
 - Prototype the decoder in Python in `Tools/duo/formats/` against the mounted ISO, check the PNGs,
   then port to Java. Existing decoders: `PataponArt` (BND, GXT), `GimImage` (GIM), `GtVolume`
-  (GT.VOL), `Txs3` (TXS3 with swizzle, CLUT4/8, DXT3/5), `GtaRadar`.
+  (GT.VOL), `Txs3` (TXS3 with swizzle, CLUT4/8, DXT3/5), `GtaRadar`, `MgaArt` (Konami _zar, QAR,
+  TXP; prototype in `formats/mga_txp.py`).
 - PSP texture facts that cost time: swizzle is 16 bytes x 8 rows blocks; rows are padded to the
-  power of two above the width (DXT rows aren't: take the stride from the buffer size); PSP DXT
-  blocks put the colour indices first, then two RGB565 colours, then alpha; atlases pack glyphs in
-  fixed cells (measure the cells by transparent gaps, then crop one pixel short of the next row).
+  power of two above the width in some formats (TXS3) and not in others (MGA's TXP: take the
+  stride from the data size); PSP DXT blocks put the colour indices first, then two RGB565 colours,
+  then alpha; atlases pack glyphs in fixed cells (measure the cells by transparent gaps, then crop
+  one pixel short of the next row).
+- **Art that comes out recognisable but noisy, or in the wrong colours, means the decode is
+  slightly off**, not that the art is grainy. Ask the GPU: find the decoded pixels in a RAM dump
+  (search for the bytes you decompressed), then the display list command `0xA0 | addr & 0xFFFFFF`
+  (TEXADDR0); next to it are TEXBUFW0 (0xA8), TEXMODE (0xC2, bit 0 = swizzled), TEXFORMAT (0xC3)
+  and CLUTADDR (0xB0/0xB1). Compare that palette with yours (MGA's starts 4 bytes before the
+  offset the file gives).
+- **Which art belongs to which item**: the game builds the name at runtime. Search RAM for format
+  strings (`%03d`), find the code that uses one (its address is loaded as `lui` + `addiu low16`:
+  search the code for the `addiu` immediate) and read where the arguments come from. Konami names
+  are hashed with StrCode (24 bit: `h = rol5(h) + c`).
 - Cache decoded art as PNG under `filesDir/duo/<game>/<gameId>_<discVersion>_<n>/` and bump `<n>`
   when the cache content changes. Mark "not on this disc" (`.none`) only when the disc was read
   fine and the file really isn't there, never after a read or parse error.
