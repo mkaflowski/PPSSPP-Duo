@@ -1,6 +1,6 @@
 ---
 name: ppsspp-duo-mod
-description: Use when building or fixing a PPSSPP Duo second-screen mod for a PSP game (DuoMod, games/*Mod.java, GranTurismoMod, PataponMod, GtaLcsMapMod, LuminesMod, MetalGearAcidMod, JeanneDArcMod), when reverse engineering a PSP game's memory or disc files for one (signature scans, RAM dumps, texture or archive formats), when testing on the AYN Thor over adb and the WebSocket debugger, or when releasing a new PPSSPP Duo version.
+description: Use when building or fixing a PPSSPP Duo second-screen mod for a PSP game (DuoMod, games/*Mod.java, GranTurismoMod, PataponMod, GtaLcsMapMod, LuminesMod, MetalGearAcidMod, JeanneDArcMod, WipeoutPureMod), when reverse engineering a PSP game's memory or disc files for one (signature scans, RAM dumps, texture or archive formats), when testing on the AYN Thor over adb and the WebSocket debugger, or when releasing a new PPSSPP Duo version.
 ---
 
 # Building a PPSSPP Duo game mod
@@ -8,6 +8,9 @@ description: Use when building or fixing a PPSSPP Duo second-screen mod for a PS
 PPSSPP Duo (repo `F:\Projects\PPSSPP-Duo`, branch `ppsspp-duo`, remote `duo` =
 github.com/mkaflowski/PPSSPP-Duo) shows a mod on the second screen of dual-screen Android handhelds.
 Read `docs/ppsspp-duo.md` first: architecture, the `DuoModContext` API, the existing mods.
+
+This skill lives in `.claude/skills/`, where both Claude Code and OpenCode find it. Keep it the only
+copy, and add what a mod taught you here.
 
 A mod is one Java class in `android/src/org/ppsspp/ppsspp/duo/games/` (generic ones in `duo/mods/`),
 registered in `DuoModRegistry.createAll()`. It's compiled into the APK; there are no separate
@@ -66,11 +69,53 @@ Screenshots and dumps go to `Tools/duo/out/` (ignored by git).
 - States that are hard to reach in the game (many units, a defeated one, a guest) can be faked
   with `memory.write` on the data the mod reads, to test the layouts; load the savestate after.
 - Logs: tag `PPSSPPDuo` (`adb logcat -d -s PPSSPPDuo:*`). Log what the mod found (addresses, names)
-  once, not per frame.
+  once, not per frame. When a mod shows nothing and nothing is logged, add a temporary log every
+  2 s of what `onStatus` sees (which watches are null, the fields it checks) rather than guessing.
+- Launching straight from the ROM folder also worked (Oct 2026):
+  `adb shell "am start -a android.intent.action.VIEW -d 'file:///storage/3233-6631/ROMS/psp/<name>.iso' -n org.ppsspp.ppssppduo/org.ppsspp.ppsspp.PpssppActivity"`,
+  with spaces, commas and parentheses URL-encoded and the whole command quoted for the device
+  shell. Wake the screen first (`input keyevent KEYCODE_WAKEUP`); a black screenshot of the second
+  screen means the app isn't running or the device is asleep.
+- `adb shell input keyevent KEYCODE_BUTTON_*` doesn't reach the game as pad input. Use the Gamepad
+  tab with a hold, `input -d 4 swipe X Y X Y 300` (a tap is too short for games that poll), or the
+  debugger.
+- Immersive mode hides the tab bar on game screens; a swipe in from the left or right edge at mid
+  height brings it back (not from the top). That swipe can also open PPSSPP's pause menu on the main
+  screen, which pauses the game: resume with Continue before judging what the mod shows.
+- From Git Bash, prefix adb commands that name device paths with `MSYS_NO_PATHCONV=1`, or
+  `/sdcard/...` is rewritten into a Windows path. In PowerShell, `>` turns binary output into
+  UTF-16, so `adb exec-out screencap -p > x.png` gives a broken file: screencap to `/sdcard/x.png`,
+  `adb pull` it, then `adb shell rm` it.
 
 On a PC, `PPSSPPWindows64.exe` with the remote debugger works the same (port from
 `Get-NetTCPConnection`). Never screenshot the desktop (private windows); use `winprint` style
 window capture only.
+
+## Driving a game in headless (no device)
+
+When the device is busy or a menu path is long, run the game in `PPSSPPHeadless` and drive it over
+the debugger. Build it with `MSBuild Windows\PPSSPP.sln /t:PPSSPPHeadless /p:Configuration=Release
+/p:Platform=x64` (`vswhere -latest` can name a Visual Studio without MSBuild; take one from
+`vswhere -all` that has `MSBuild\Current\Bin\MSBuild.exe`).
+
+- **Start from the player's savestate**: ask the user for a state at the moment that matters (a
+  battle, a race, the card screen) and what the HUD shows then. `adb pull
+  /sdcard/PSP/PPSSPP_STATE/<ID>_<ver>_0.ppst` (slot 1 in the UI is `_0`); a state from the Thor or
+  from `ppsspp_win` loads in a headless built from this tree.
+- `PPSSPPHeadless <iso> --state=<ppst> --debugger-run=<port> --graphics=software
+  --memstick=<scratch dir> --timeout-wall=<s>`. With `--debugger` instead of `--debugger-run` it
+  waits at the entry point until `cpu.resume`.
+- Screenshots (`gpu.buffer.screenshot`) and consistent dumps need the CPU stepping first:
+  `cpu.stepping` answers with a broadcast, not with the request's ticket. Take the screenshot and
+  the RAM in the same pause, so the HUD you read belongs to the dump you search.
+- Hold a button with `input.buttons.send` on one connection; it's released when that connection
+  closes (a ship then drifts into a wall). Menus need `input.buttons.press` with `duration` 10-20
+  frames and a few seconds between presses. The debugger can't save states: keep one instance
+  running across commands, or reload the state.
+- System dialogs (savedata, Memory Stick) render without text in headless; cross or circle gets
+  through them.
+- A game in attract mode after a timeout on the title screen is a real race or level and can
+  already be searched.
 
 ## Finding the data in RAM
 
@@ -95,13 +140,26 @@ version; game objects are on the heap and move per race/level/boot.
   'GTCM') is a stable anchor, and its bytes can be matched against the disc to learn the file name.
 - **Duplicates**: when there are several copies of a block, pick the live one by its values (GT
   telemetry has three copies and which are live varies per race).
+- **Static tables are common**: Jeanne d'Arc's units and WipEout's ships are arrays in the main
+  module's data (check with `hle.module.list` that the address is inside the main module), so a
+  fixed address per version is fine there. Index fields that run 0..N-1 across the records mark
+  where each record starts; a permutation of 1..N is usually the race or turn order.
+- **Prove a field by writing it**: `memory.write` a different value and see the HUD follow (MGA's
+  life 24 -> 20 showed "20/30"). A field that only correlates may be a copy or a smoothed value.
+- What the HUD shows can differ from the stored value: WipEout's speed field is the length of the
+  velocity, the HUD shows its forward part, so they differ while scraping a wall.
+- Text in RAM (card names, menus) usually comes from a string table of offsets; find the table
+  (entries like `0x80000000 | offset`) and the index rule (MGA: name = 8 + card, text = 259 + card),
+  then read the same table from the disc instead of RAM.
 - Validate against the game's own display, then on a second run, before building UI on it.
 - Memory breakpoints (`memory.breakpoint.add read=true`) didn't trip on the Thor (ARM64 JIT), even
   for a fixed address the game reads every frame; diffing dumps works there.
 
 Per frame the host copies up to 16 watched ranges of 16 KB each (`setMemoryWatches`); read them in
 `onStatus` with `readMemoryWatch(i)` and re-check the signature fields every time (objects die
-when a race ends: then search again).
+when a race ends: then search again). After `setMemoryWatches`, every watch reads null until the
+next frame: treat null as "wait", never as "the object is gone" (MGA's mod kept losing the hand
+that way). Keep the last picture for a second or two when the data briefly disappears.
 
 ## Finding the art on the disc
 
@@ -130,6 +188,18 @@ when a race ends: then search again).
   (TEXADDR0); next to it are TEXBUFW0 (0xA8), TEXMODE (0xC2, bit 0 = swizzled), TEXFORMAT (0xC3)
   and CLUTADDR (0xB0/0xB1). Compare that palette with yours (MGA's starts 4 bytes before the
   offset the file gives).
+- **List what the GPU draws**: scan a RAM dump for words `0xA0xxxxxx` with `0xA8`, `0xB8` (size as
+  powers of two) and `0xC3` within a dozen words, and decode each texture with its CLUT. HUD
+  textures may sit in VRAM: `memory.read` reads `0x04000000-0x04200000` too. Then find the decoded
+  bytes in the disc files to learn which file and offset they come from. That's how WipEout's HUD
+  font turned up: its pixels start at +0x80 of the texture, not after the 16-byte header, and the
+  game draws it white with alpha = the palette entry's grey level.
+- Formats met so far, beyond the decoders above: WipEout's WAD (u32 version, u32 count, 16-byte
+  entries of name hash, offset, size, size; no names) and FNT (see `WipeoutFont`); MGA's `_zar`
+  (u32 unpacked size, then zlib); Patapon 2 keeps the drum art at `loadinggroup/gamedata.bnd ::
+  loadinggroupcmn.bndz :: modellist.bnd :: game.mdll :: int_font00.gxt` (see `PataponArt`).
+- A game's own font rarely has non-Latin-1 letters (ą, ż) or `%`: keep labels drawn with it in the
+  game's English, like its HUD, and draw translated text (waiting messages) with the system font.
 - **Which art belongs to which item**: the game builds the name at runtime. Search RAM for format
   strings (`%03d`), find the code that uses one (its address is loaded as `lui` + `addiu low16`:
   search the code for the `addiu` immediate) and read where the arguments come from. Konami names
@@ -161,6 +231,14 @@ when a race ends: then search again).
   long builds through the shell tool get killed by its timeout: start without `-Wait`, sleep, read
   the log). Always the `duoOptimized` variant: `duoDebug` runs heavy games at half speed.
 - APK: `android/build/outputs/apk/duo/optimized/android-duo-optimized.apk`.
+- `gradlew.bat :android:installDuoOptimized` builds and installs on the Thor in one step (only Java
+  changed: about 10 s). Installing restarts the app, so the game has to be started and the state
+  loaded again.
+- Patching files from Git Bash: a heredoc strips one level of backslashes, so Java strings like
+  `"\n"` lose theirs; write the patch script with the editor tool and run it. Keep each file's line
+  endings (`newline=''`, or replace `\r\n` and write back), see `AGENTS.md`.
+- Another session may be working in the same tree: check `git status` and `git log` before
+  committing, and commit only the files you changed.
 
 ## Releasing (only when asked)
 
