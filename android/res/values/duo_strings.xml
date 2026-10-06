@@ -99,6 +99,9 @@
     <string name="duo_mod_wipeout_desc">WipEout Pure: speed, shield energy, position, lap times and a map of the track with every ship on it</string>
     <string name="duo_wipeout_idle">Start a race to see the telemetry</string>
     <string name="duo_wipeout_map_hint">The track map draws itself as the ships race</string>
+    <string name="duo_mod_persona3">Analyze</string>
+    <string name="duo_mod_persona3_desc">Persona 3 Portable: your party\'s HP and SP, and every enemy\'s level, HP and affinities during battles</string>
+    <string name="duo_persona3_idle">Start a battle to see your party and the enemies</string>
 
     <string name="duo_mod_diagnostics">Diagnostics</string>
     <string name="duo_mod_diagnostics_desc">Emulator status, display info and a memory view, for mod developers</string>

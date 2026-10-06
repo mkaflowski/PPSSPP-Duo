@@ -43,10 +43,13 @@ When one of these games starts, its mod opens on the second screen by itself.
 | **Metal Gear Ac!d** | Cards | Your hand of cards as the game draws them (with their illustrations), big and readable, with the full text of the card under the cursor; tap a card to move the game's cursor to it. Snake's life, deck, cost and turn | ULUS10006 v1.00 (US) |
 | **Jeanne d'Arc** | Battle | Your party and the enemies with HP, MP and level, and the turn number, drawn like the game's status window with its portraits and lettering (the defeated in black and white, guests tagged) | UCUS98700 v1.00 (US) |
 | **WipEout Pure** | Race | Position, lap, speed with the HUD's speed bar, shield energy, race and lap times (last and best), and a map of the track that draws itself from where every ship has been, all in the game's own HUD lettering | UCUS98612 v2.00 (US) |
+| **Persona 3 Portable** | Analyze | During battles, your party's HP and SP with their HUD faces, and every enemy's level, arcana, HP and affinities (weak, strong, null, repel, drain), drawn like the game's Analyze screen with its element icons | ULES01523 v1.01 (EU) |
 
 Other releases of these games are recognized too, and the mods look up the game data at runtime
 rather than relying on fixed addresses, but only the versions above have been tested. Jeanne d'Arc,
 Metal Gear Ac!d and WipEout Pure are the exceptions: their mods only support the US release.
+The Persona 3 Portable mod only supports the European release (the US one is recognized, but
+untested).
 
 <p align="center">
   <img src="docs/images/duo/drums.png" width="48%" alt="Patapon drums">

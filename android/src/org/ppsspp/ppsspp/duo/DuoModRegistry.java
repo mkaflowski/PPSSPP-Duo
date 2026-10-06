@@ -6,6 +6,7 @@ import org.ppsspp.ppsspp.duo.games.JeanneDArcMod;
 import org.ppsspp.ppsspp.duo.games.LuminesMod;
 import org.ppsspp.ppsspp.duo.games.MetalGearAcidMod;
 import org.ppsspp.ppsspp.duo.games.PataponMod;
+import org.ppsspp.ppsspp.duo.games.Persona3Mod;
 import org.ppsspp.ppsspp.duo.games.WipeoutPureMod;
 import org.ppsspp.ppsspp.duo.mods.BlankMod;
 import org.ppsspp.ppsspp.duo.mods.DashboardMod;
@@ -34,6 +35,7 @@ public final class DuoModRegistry {
 		mods.add(new JeanneDArcMod());
 		mods.add(new MetalGearAcidMod());
 		mods.add(new WipeoutPureMod());
+		mods.add(new Persona3Mod());
 		mods.add(new BlankMod());
 		mods.add(new DiagnosticsMod());
 		return Collections.unmodifiableList(mods);

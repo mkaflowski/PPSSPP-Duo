@@ -99,6 +99,9 @@
     <string name="duo_mod_wipeout_desc">WipEout Pure: prędkość, energia osłony, pozycja, czasy okrążeń i mapa toru ze wszystkimi statkami</string>
     <string name="duo_wipeout_idle">Zacznij wyścig, żeby zobaczyć telemetrię</string>
     <string name="duo_wipeout_map_hint">Mapa toru rysuje się, gdy statki jadą</string>
+    <string name="duo_mod_persona3">Analiza</string>
+    <string name="duo_mod_persona3_desc">Persona 3 Portable: HP i SP drużyny oraz poziom, HP i odporności każdego wroga w czasie walki</string>
+    <string name="duo_persona3_idle">Zacznij walkę, żeby zobaczyć drużynę i wrogów</string>
 
     <string name="duo_mod_diagnostics">Diagnostyka</string>
     <string name="duo_mod_diagnostics_desc">Stan emulatora, informacje o ekranie i podgląd pamięci, dla twórców modów</string>

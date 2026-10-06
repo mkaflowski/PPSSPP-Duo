@@ -1,6 +1,6 @@
 ---
 name: ppsspp-duo-mod
-description: Use when building or fixing a PPSSPP Duo second-screen mod for a PSP game (DuoMod, games/*Mod.java, GranTurismoMod, PataponMod, GtaLcsMapMod, LuminesMod, MetalGearAcidMod, JeanneDArcMod, WipeoutPureMod), when reverse engineering a PSP game's memory or disc files for one (signature scans, RAM dumps, texture or archive formats), when testing on the AYN Thor over adb and the WebSocket debugger, or when releasing a new PPSSPP Duo version.
+description: Use when building or fixing a PPSSPP Duo second-screen mod for a PSP game (DuoMod, games/*Mod.java, GranTurismoMod, PataponMod, GtaLcsMapMod, LuminesMod, MetalGearAcidMod, JeanneDArcMod, WipeoutPureMod, Persona3Mod), when reverse engineering a PSP game's memory or disc files for one (signature scans, RAM dumps, texture or archive formats), when testing on the AYN Thor over adb and the WebSocket debugger, or when releasing a new PPSSPP Duo version.
 ---
 
 # Building a PPSSPP Duo game mod
@@ -44,6 +44,7 @@ Tools live in `Tools/duo/` (Python 3 + `pip install websocket-client pillow nump
 | `memscan.py` | `value`, `text`, `diff`, `matrices`, `motion`, `compare`, `sig` searches in RAM |
 | `formats/gt_vol.py`, `formats/txs3.py` | Gran Turismo archive and texture decoders (models for new formats) |
 | `formats/gim.py`, `formats/spf.py` | GIM to PNG (as `GimImage`), Jeanne d'Arc's SPF packs (list, extract) |
+| `formats/cri_cpk.py`, `formats/atlus_spr.py` | CRI CPK archives with CRILAYLA (list, extract), Atlus SPR0 / TMX0 textures (as `Persona3Art`) |
 | `release.py VERSION notes.md` | GitHub release with the APK |
 
 Screenshots and dumps go to `Tools/duo/out/` (ignored by git).
@@ -58,7 +59,7 @@ Screenshots and dumps go to `Tools/duo/out/` (ignored by git).
 4. **Find the art on the disc** (below) if the mod should look like the game.
 5. **Write the mod** (conventions below). Older mods have a plain look and a game look with a button
    to switch (`PataponMod`, `GranTurismoMod`); new ones are drawn in the game's look only
-   (`MetalGearAcidMod`, `JeanneDArcMod`, `WipeoutPureMod`), with plain drawing just as the fallback
+   (`MetalGearAcidMod`, `JeanneDArcMod`, `WipeoutPureMod`, `Persona3Mod`), with plain drawing just as the fallback
    when the art can't be read.
 6. **Test on the device** against what the game shows, on two different sessions (another track,
    level or save). Take full-size screenshots of the second screen for the README.
@@ -98,6 +99,9 @@ Screenshots and dumps go to `Tools/duo/out/` (ignored by git).
 - `adb shell input keyevent KEYCODE_BUTTON_*` doesn't reach the game as pad input. Use the Gamepad
   tab with a hold, `input -d <input display> swipe X Y X Y 300` (a tap is too short for games that
   poll), or the debugger.
+- The Thor's own panel (AYN's dual-screen assistant) can sit over the second screen and hide the
+  app; a swipe down from the top of the second screen (`input -d <input display> swipe 620 50 620
+  900 200`) closes it. PPSSPP's pause menu doesn't open from an adb tap on the main screen.
 - Immersive mode hides the tab bar on game screens; a swipe in from the left or right edge at mid
   height brings it back (not from the top). That swipe can also open PPSSPP's pause menu on the main
   screen, which pauses the game: resume with Continue before judging what the mod shows.
@@ -118,7 +122,13 @@ the debugger. Build it with `MSBuild Windows\PPSSPP.sln /t:PPSSPPHeadless /p:Con
 `vswhere -all` that has `MSBuild\Current\Bin\MSBuild.exe`).
 
 - **Start from the player's savestate**: ask for a state at the moment that matters (a battle, a
-  race, the card screen) and what the HUD shows then. `adb pull
+  race, the card screen) and what the HUD shows then. When there's none and the moment is hours
+  into the game (Persona 3's first battle is two in-game days of story away), ask the player
+  whether to use a downloaded game save: GameFAQs has PSP saves per region (a ZIP of the
+  `<ID>DATAxx` folder; the built-in browser downloads it into Downloads as a `.tmp`). Push the
+  folder to `/sdcard/PSP/SAVEDATA/`, load it in the game, get to the moment and make your own
+  savestates (Dashboard's Save state, another slot than the player's). Don't mash cross through
+  dialogs near a save point: it walks into the game's save dialog and overwrites the save. `adb pull
   /sdcard/PSP/PPSSPP_STATE/<ID>_<ver>_0.ppst` (slot 1 in the UI is `_0`); a state from the device or
   from a desktop PPSSPP loads in a headless built from this tree.
 - `PPSSPPHeadless <iso> --state=<ppst> --debugger-run=<port> --graphics=software
@@ -171,6 +181,17 @@ version; game objects are on the heap and move per race/level/boot.
   (entries like `0x80000000 | offset`) and the index rule (MGA: name = 8 + card, text = 259 + card),
   then read the same table from the disc instead of RAM.
 - Validate against the game's own display, then on a second run, before building UI on it.
+- **"Is a battle (race, level) on?"**: dump RAM in two or three battles and on the field, and
+  list the main module's words that are equal in every battle dump and different in every field
+  dump. Persona 3 has one (`0x08C3BDB8`, -1 outside battles) right next to a pointer into the
+  battle's heap objects, so nothing has to be scanned for.
+- Heap objects that hold nothing recognisable are found from both ends: search for a value the
+  HUD shows (an enemy's HP with its max right after), then for pointers to that struct, and so on
+  until a static address or a struct with constant fields turns up.
+- Values the HUD shows may not be stored at all: Persona 3's max HP and SP are the row for the
+  character's level in a table. Search for the max next to its neighbours in the table (other
+  characters, other levels) and find the level by checking which byte of the character equals
+  the row index.
 - Memory breakpoints (`memory.breakpoint.add read=true`) didn't trip on the Thor (ARM64 JIT), even
   for a fixed address the game reads every frame; diffing dumps works there.
 
@@ -213,6 +234,13 @@ that way). Keep the last picture for a second or two when the data briefly disap
   bytes in the disc files to learn which file and offset they come from. That's how WipEout's HUD
   font turned up: its pixels start at +0x80 of the texture, not after the 16-byte header, and the
   game draws it white with alpha = the palette entry's grey level.
+- Textures in RAM are usually swizzled, so their bytes won't match the disc: unswizzle what the
+  GPU uses (`TEXMODE` bit 0) before searching the disc files for it. Big archives hide the file:
+  extract the candidates (`formats/cri_cpk.py`) and search those. P3P's Analyze icons were in
+  `data/init_free.bin :: init/camp.bin :: c_main_01.spr`.
+- A HUD part can be two textures: Persona 3's faces have their outline in a separate white
+  silhouette that the HUD draws light blue under the face. When a decoded picture is right but
+  looks bare next to the game, look at the textures next to it.
 - Formats met so far, beyond the decoders above: WipEout's WAD (u32 version, u32 count, 16-byte
   entries of name hash, offset, size, size; no names) and FNT (see `WipeoutFont`); MGA's `_zar`
   (u32 unpacked size, then zlib); Patapon 2 keeps the drum art at `loadinggroup/gamedata.bnd ::

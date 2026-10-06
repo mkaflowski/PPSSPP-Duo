@@ -133,6 +133,16 @@ public final class MyMod extends DuoMod {
   lettering, the `FNT` font 0xD7B3DDA5 in `FE.wad`, read at runtime and cached (see
   `WipeoutFont`: the WAD is a hash table of files; the font's palette grey levels are the alpha).
   Other releases aren't supported.
+- **Analyze** (Persona 3 Portable, ULES01523 v1.01; ULUS10512 is recognized but untested): in
+  battles, the party's HP and SP (max HP and SP come from the per-level table, they aren't stored)
+  and each enemy's level, arcana, HP and affinities, drawn like the Analyze screen. All affinities
+  are shown, including those the player hasn't discovered yet (the save that records them is
+  encrypted on disc and wasn't looked for in RAM). A flag word at `0x08C3BDB8` says whether a
+  battle is on and points to its participants; characters and the battle tables (from `UNIT.TBL`)
+  are in the main module's data, the enemy group on the heap (see `Persona3Mod`). The element icons,
+  the Wk / Str / Nul / Rpl / Dm labels and the HUD faces (with their outlines) are read from
+  `umd0.cpk` at runtime (a CRI CPK with CRILAYLA compression; Atlus SPR0 / TMX0 textures, see
+  `Persona3Art`) and cached as PNGs.
 - **Screen off**: black, tab bar hidden.
 - **Diagnostics**: raw status, display info, memory dump.
 
