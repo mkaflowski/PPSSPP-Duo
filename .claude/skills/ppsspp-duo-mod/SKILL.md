@@ -5,12 +5,29 @@ description: Use when building or fixing a PPSSPP Duo second-screen mod for a PS
 
 # Building a PPSSPP Duo game mod
 
-PPSSPP Duo (repo `F:\Projects\PPSSPP-Duo`, branch `ppsspp-duo`, remote `duo` =
-github.com/mkaflowski/PPSSPP-Duo) shows a mod on the second screen of dual-screen Android handhelds.
-Read `docs/ppsspp-duo.md` first: architecture, the `DuoModContext` API, the existing mods.
+PPSSPP Duo (github.com/mkaflowski/PPSSPP-Duo, branch `ppsspp-duo`; upstream PPSSPP is a separate
+remote) shows a mod on the second screen of dual-screen Android handhelds. Read
+`docs/ppsspp-duo.md` first: architecture, the `DuoModContext` API, the existing mods.
 
-This skill lives in `.claude/skills/`, where both Claude Code and OpenCode find it. Keep it the only
-copy, and add what a mod taught you here.
+This skill lives in `.claude/skills/`, where both Claude Code and OpenCode find it; other agents and
+people reach it from `AGENTS.md` and `docs/ppsspp-duo.md`. Keep it the only copy, and add what a
+mod taught you here.
+
+## Your setup
+
+The examples below come from the maintainer's AYN Thor on Windows. Look up your own values once:
+
+| What | How to find it | Thor example |
+|---|---|---|
+| adb | Android SDK `platform-tools` (`%LOCALAPPDATA%\Android\Sdk` on Windows) | |
+| Device serial (`adb -s`) | `adb devices` | `5b47bb6` |
+| SD card and ROM folder | `adb shell ls /storage` | `/storage/3233-6631/ROMS/psp/` |
+| Display IDs for `screencap -d` | `adb shell dumpsys SurfaceFlinger --display-id` | main `4630946441858561667`, second `4630946482288158084` |
+| Display ID for `input -d` | `adb shell dumpsys display \| grep mDisplayId` | `4` |
+| Second screen size | `dumpsys display`, or a screenshot | 1240x1080 |
+
+`Tools/duo/thor.ps1` takes the app folder on the SD card as `-AppDir`; tap coordinates in this
+skill are for a 1240x1080 second screen, so scale or re-measure them on other devices.
 
 A mod is one Java class in `android/src/org/ppsspp/ppsspp/duo/games/` (generic ones in `duo/mods/`),
 registered in `DuoModRegistry.createAll()`. It's compiled into the APK; there are no separate
@@ -40,45 +57,47 @@ Screenshots and dumps go to `Tools/duo/out/` (ignored by git).
 3. **Find the data in RAM** (below). Prefer things the game itself displays, so they can be checked.
 4. **Find the art on the disc** (below) if the mod should look like the game.
 5. **Write the mod** (conventions below). Older mods have a plain look and a game look with a button
-   to switch (`PataponMod`, `GranTurismoMod`); the user prefers the game look only for new ones
-   (`MetalGearAcidMod`, `JeanneDArcMod`), with plain drawing just as the fallback when the art
-   can't be read.
+   to switch (`PataponMod`, `GranTurismoMod`); new ones are drawn in the game's look only
+   (`MetalGearAcidMod`, `JeanneDArcMod`, `WipeoutPureMod`), with plain drawing just as the fallback
+   when the art can't be read.
 6. **Test on the device** against what the game shows, on two different sessions (another track,
    level or save). Take full-size screenshots of the second screen for the README.
 7. **Document**: README table row (game, mod, what it shows, tested version) and screenshot (620x540,
    `docs/images/duo/`), `docs/ppsspp-duo.md` entry with the memory layout and file formats.
-8. **Release** when asked (below). Never push without the user asking.
+8. **Share it**: contributors open a pull request against `ppsspp-duo`; releases (below) are the
+   maintainer's. Never push without the person you work for asking.
 
-## Running a game on the Thor
+## Running a game on the device
 
-- adb: `$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe`, device `5b47bb6`. It disconnects
-  now and then; wait and retry, don't assume the device state.
-- ROMs are in `/storage/3233-6631/ROMS/psp/`. An adb-started `file://` path only works inside the
-  app folder: `mv` the ISO to `/storage/3233-6631/Android/data/org.ppsspp.ppssppduo/files/` for the
-  session and **move it back afterwards** (same volume, instant). Then `thor.ps1 -Iso <name>`.
+- adb disconnects now and then; wait and retry, don't assume the device state.
+- ROMs are wherever the player keeps them (the Thor: `/storage/<sd>/ROMS/psp/`). An adb-started
+  `file://` path used to work only inside the app folder: `mv` the ISO to
+  `/storage/<sd>/Android/data/org.ppsspp.ppssppduo/files/` for the session and **move it back
+  afterwards** (same volume, instant), then `thor.ps1 -Iso <name>`. Launching from the ROM folder
+  itself now works too (below).
 - `thor.ps1` sets `svc power stayon usb` (the screen sleeps in menus and input stops). Restore with
   `adb shell svc power stayon false` when done.
-- Displays: main `4630946441858561667`, second `4630946482288158084` (`duodbg.displays()` reads them).
-  On the second screen `adb shell input -d 4 tap X Y` taps (coordinates in its 1240x1080 pixels).
+- Displays: see "Your setup" (`duodbg.displays()` reads them). On the second screen
+  `adb shell input -d <input display> tap X Y` taps, in its own pixels.
 - `d.press()` returns only after the press, so it times out if the game is paused or the screen is
   off. Menus with animated cursors need `cross:10` and 3 s waits; screenshot after each block of
   steps, menus drift by one step easily.
 - Installing a new APK kills the game: batch code changes, then reinstall and drive back in. Write
   the menu path down as a `nav.py` line once it works. Quicker: keep a savestate in slot 1 and load
-  it from the Dashboard tab (`input -d 4 tap 128 56`, then `555 478`).
+  it from the Dashboard tab (on a 1240x1080 second screen: `input -d 4 tap 128 56`, then `555 478`).
 - States that are hard to reach in the game (many units, a defeated one, a guest) can be faked
   with `memory.write` on the data the mod reads, to test the layouts; load the savestate after.
 - Logs: tag `PPSSPPDuo` (`adb logcat -d -s PPSSPPDuo:*`). Log what the mod found (addresses, names)
   once, not per frame. When a mod shows nothing and nothing is logged, add a temporary log every
   2 s of what `onStatus` sees (which watches are null, the fields it checks) rather than guessing.
 - Launching straight from the ROM folder also worked (Oct 2026):
-  `adb shell "am start -a android.intent.action.VIEW -d 'file:///storage/3233-6631/ROMS/psp/<name>.iso' -n org.ppsspp.ppssppduo/org.ppsspp.ppsspp.PpssppActivity"`,
+  `adb shell "am start -a android.intent.action.VIEW -d 'file:///storage/<sd>/ROMS/psp/<name>.iso' -n org.ppsspp.ppssppduo/org.ppsspp.ppsspp.PpssppActivity"`,
   with spaces, commas and parentheses URL-encoded and the whole command quoted for the device
   shell. Wake the screen first (`input keyevent KEYCODE_WAKEUP`); a black screenshot of the second
   screen means the app isn't running or the device is asleep.
 - `adb shell input keyevent KEYCODE_BUTTON_*` doesn't reach the game as pad input. Use the Gamepad
-  tab with a hold, `input -d 4 swipe X Y X Y 300` (a tap is too short for games that poll), or the
-  debugger.
+  tab with a hold, `input -d <input display> swipe X Y X Y 300` (a tap is too short for games that
+  poll), or the debugger.
 - Immersive mode hides the tab bar on game screens; a swipe in from the left or right edge at mid
   height brings it back (not from the top). That swipe can also open PPSSPP's pause menu on the main
   screen, which pauses the game: resume with Continue before judging what the mod shows.
@@ -98,10 +117,10 @@ the debugger. Build it with `MSBuild Windows\PPSSPP.sln /t:PPSSPPHeadless /p:Con
 /p:Platform=x64` (`vswhere -latest` can name a Visual Studio without MSBuild; take one from
 `vswhere -all` that has `MSBuild\Current\Bin\MSBuild.exe`).
 
-- **Start from the player's savestate**: ask the user for a state at the moment that matters (a
-  battle, a race, the card screen) and what the HUD shows then. `adb pull
-  /sdcard/PSP/PPSSPP_STATE/<ID>_<ver>_0.ppst` (slot 1 in the UI is `_0`); a state from the Thor or
-  from `ppsspp_win` loads in a headless built from this tree.
+- **Start from the player's savestate**: ask for a state at the moment that matters (a battle, a
+  race, the card screen) and what the HUD shows then. `adb pull
+  /sdcard/PSP/PPSSPP_STATE/<ID>_<ver>_0.ppst` (slot 1 in the UI is `_0`); a state from the device or
+  from a desktop PPSSPP loads in a headless built from this tree.
 - `PPSSPPHeadless <iso> --state=<ppst> --debugger-run=<port> --graphics=software
   --memstick=<scratch dir> --timeout-wall=<s>`. With `--debugger` instead of `--debugger-run` it
   waits at the entry point until `cpu.resume`.
@@ -226,8 +245,9 @@ that way). Keep the last picture for a second or two when the data briefly disap
 
 ## Building
 
-- `$env:JAVA_HOME='C:\Program Files\Java\jdk-17.0.1'`, then from the repo root
-  `gradlew.bat :android:assembleDuoOptimized` (run it through `Start-Process cmd.exe ... -Wait`;
+- JDK 17 or newer in `JAVA_HOME`, then from the repo root
+  `gradlew.bat :android:assembleDuoOptimized` (`./gradlew` elsewhere; on Windows, run it through
+  `Start-Process cmd.exe ... -Wait` if your shell tool has a short timeout;
   long builds through the shell tool get killed by its timeout: start without `-Wait`, sleep, read
   the log). Always the `duoOptimized` variant: `duoDebug` runs heavy games at half speed.
 - APK: `android/build/outputs/apk/duo/optimized/android-duo-optimized.apk`.
@@ -240,7 +260,7 @@ that way). Keep the last picture for a second or two when the data briefly disap
 - Another session may be working in the same tree: check `git status` and `git log` before
   committing, and commit only the files you changed.
 
-## Releasing (only when asked)
+## Releasing (maintainer, only when asked)
 
 1. Bump `duoVersionName` / `duoVersionCode` in `android/build.gradle.kts`, commit "PPSSPP Duo X.Y.Z".
 2. `git tag -a duo-vX.Y.Z -m "PPSSPP Duo X.Y.Z"`; tags are `duo-v*` so they don't mix with upstream's.
@@ -251,7 +271,7 @@ that way). Keep the last picture for a second or two when the data briefly disap
 4. `git push duo ppsspp-duo:main` and `git push duo duo-vX.Y.Z`.
 5. Notes in English (what's new per game, install line, "Based on PPSSPP ... Games are not
    included"), then `python Tools/duo/release.py X.Y.Z notes.md`.
-6. Install the release APK on the Thor too.
+6. Install the release APK on the test device too.
 
-Commits: author Mateusz Kaflowski <mkaflowski@gmail.com>, no session markers, `Co-Authored-By` is
-fine. Feature work on a topic branch is fine; merge into `ppsspp-duo` before releasing.
+Commits: under your own git identity, no session markers, `Co-Authored-By` is fine. Feature work
+on a topic branch is fine; it's merged into `ppsspp-duo` before a release.

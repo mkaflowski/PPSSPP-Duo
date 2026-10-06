@@ -46,6 +46,11 @@ DuoNative (JNI) ── android/jni/DuoBridge.cpp ── DuoBridge_OnFrame() on t
 
 ## Writing a mod
 
+The whole process (finding the data in RAM and the art on the disc, testing on a device or in
+headless, the traps met so far) is in the
+[ppsspp-duo-mod skill](../.claude/skills/ppsspp-duo-mod/SKILL.md), which Claude Code and OpenCode
+load by themselves; the steps below are the minimum.
+
 1. Subclass `org.ppsspp.ppsspp.duo.DuoMod` (generic mods in `duo/mods`, game-specific in `duo/games`).
 2. Register it in `DuoModRegistry.createAll()`.
 

@@ -30,6 +30,8 @@ for it:
 | [docs/pkg_notes.md](docs/pkg_notes.md) | The NPDRM `.pkg` format PSP game updates ship in, and how PPSSPP installs them |
 | [docs/kernel-hle-review.md](docs/kernel-hle-review.md) | Findings from a review pass over `Core/HLE/sceKernel*.cpp`, and what was verified clean |
 | [docs/metal-backend.md](docs/metal-backend.md) | What a native Metal backend would take, and why programmable blending is the reason to want one |
+| [docs/ppsspp-duo.md](docs/ppsspp-duo.md) | PPSSPP Duo, the dual-screen Android build: architecture, the mod API, what each game mod reads |
+| [.claude/skills/ppsspp-duo-mod/SKILL.md](.claude/skills/ppsspp-duo-mod/SKILL.md) | Building a PPSSPP Duo game mod: finding the game's data in RAM and its art on the disc, testing on a device or in headless, releasing |
 
 ## General instructions
 
