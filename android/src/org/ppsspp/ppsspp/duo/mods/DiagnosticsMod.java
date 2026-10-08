@@ -1,12 +1,16 @@
 package org.ppsspp.ppsspp.duo.mods;
 
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.graphics.Point;
 import android.graphics.Typeface;
 import android.view.Display;
 import android.view.View;
+import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import org.ppsspp.ppsspp.R;
 import org.ppsspp.ppsspp.duo.DuoMod;
@@ -14,6 +18,8 @@ import org.ppsspp.ppsspp.duo.DuoModContext;
 import org.ppsspp.ppsspp.duo.DuoStatus;
 import org.ppsspp.ppsspp.duo.DuoUi;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.util.Locale;
 
 // Developer view: raw status, display info and a memory watch. Also the reference for mods that
@@ -55,13 +61,62 @@ public final class DiagnosticsMod extends DuoMod {
 		Context ctx = host.getContext();
 		host.setMemoryWatches(new int[] {WATCH_ADDRESS}, new int[] {WATCH_SIZE});
 
+		LinearLayout root = new LinearLayout(ctx);
+		root.setOrientation(LinearLayout.VERTICAL);
+		int pad = DuoUi.dp(ctx, 12);
+
+		TextView copy = DuoUi.button(ctx, ctx.getString(R.string.duo_diag_copy_logs));
+		copy.setOnClickListener(v -> copyLogs(copy));
+		LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, DuoUi.dp(ctx, 48));
+		lp.setMargins(pad, pad, pad, 0);
+		root.addView(copy, lp);
+
 		ScrollView scroll = new ScrollView(ctx);
 		text = DuoUi.text(ctx, "", 13, DuoUi.COLOR_TEXT);
 		text.setTypeface(Typeface.MONOSPACE);
-		int pad = DuoUi.dp(ctx, 12);
 		text.setPadding(pad, pad, pad, pad);
 		scroll.addView(text);
-		return scroll;
+		root.addView(scroll, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1));
+		return root;
+	}
+
+	// Copies the status shown here and the app's own log lines (tag PPSSPPDuo, its own process only,
+	// which Android lets an app read) to the clipboard, to paste into a message.
+	private void copyLogs(View button) {
+		Context ctx = button.getContext();
+		String header = text != null ? text.getText().toString() : "";
+		new Thread(() -> {
+			StringBuilder out = new StringBuilder(header).append("\n--- log ---\n");
+			int lines = 0;
+			try {
+				Process p = new ProcessBuilder("logcat", "-d", "-v", "time", "-t", "2000", "-s", "PPSSPPDuo:*")
+					.redirectErrorStream(true).start();
+				try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
+					java.util.ArrayDeque<String> tail = new java.util.ArrayDeque<>();
+					String line;
+					while ((line = r.readLine()) != null) {
+						tail.add(line);
+						if (tail.size() > 300) {
+							tail.poll();
+						}
+					}
+					for (String l : tail) {
+						out.append(l).append('\n');
+					}
+					lines = tail.size();
+				}
+			} catch (Exception e) {
+				out.append("can't read the log: ").append(e).append('\n');
+			}
+			final int n = lines;
+			button.post(() -> {
+				ClipboardManager cm = (ClipboardManager)ctx.getSystemService(Context.CLIPBOARD_SERVICE);
+				if (cm != null) {
+					cm.setPrimaryClip(ClipData.newPlainText("PPSSPP Duo logs", out.toString()));
+					Toast.makeText(ctx, ctx.getString(R.string.duo_diag_logs_copied, n), Toast.LENGTH_SHORT).show();
+				}
+			});
+		}).start();
 	}
 
 	@Override

@@ -104,5 +104,7 @@
     <string name="duo_persona3_idle">Start a battle to see your party and the enemies</string>
 
     <string name="duo_mod_diagnostics">Diagnostics</string>
+    <string name="duo_diag_copy_logs">Copy logs</string>
+    <string name="duo_diag_logs_copied">Copied the status and %1$d log lines, paste them in a message</string>
     <string name="duo_mod_diagnostics_desc">Emulator status, display info and a memory view, for mod developers</string>
 </resources>
