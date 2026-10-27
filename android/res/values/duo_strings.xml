@@ -102,6 +102,11 @@
     <string name="duo_mod_persona3">Analyze</string>
     <string name="duo_mod_persona3_desc">Persona 3 Portable: your party\'s HP and SP, and every enemy\'s level, HP and affinities during battles</string>
     <string name="duo_persona3_idle">Start a battle to see your party and the enemies</string>
+    <string name="duo_mod_persona1">Party</string>
+    <string name="duo_mod_persona1_desc">Persona: your party\'s HP and SP, and every enemy\'s HP and SP during battles</string>
+    <string name="duo_persona1_party">PARTY</string>
+    <string name="duo_persona1_enemies">ENEMIES</string>
+    <string name="duo_persona1_waiting">Waiting for the party…</string>
 
     <string name="duo_mod_diagnostics">Diagnostics</string>
     <string name="duo_diag_copy_logs">Copy logs</string>

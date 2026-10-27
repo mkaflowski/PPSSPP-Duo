@@ -143,6 +143,34 @@ public final class MyMod extends DuoMod {
   the Wk / Str / Nul / Rpl / Dm labels and the HUD faces (with their outlines) are read from
   `umd0.cpk` at runtime (a CRI CPK with CRILAYLA compression; Atlus SPR0 / TMX0 textures, see
   `Persona3Art`) and cached as PNGs.
+- **Party** (Persona, ULUS10432 v1.00): in battles, a card per party member and per enemy, laid out
+  like Shin Megami Tensei IV's (name, HP and SP with bars, portrait, level; knocked out units in
+  black and white on gray, a card shakes and flashes when its unit loses HP). In dungeons, the
+  floor's map instead, with a strip of the party below. Everything is in the main module's data:
+  - Battle units at `0x08D03DC8 + n * 0x118` (0-4 the party in HUD order, 5-12 the enemies; the
+    HUD reads these): u32 HP, max HP, SP, max SP, u16 id at +0x3E (the character, 1 the hero to 9
+    Reiji, or the demon), the name at +0x40 (big-endian u16, uppercase and digits ASCII + 0x9F,
+    lowercase ASCII + 0xA0, 0x8140 a space, 0xFFFF at the end), u8 level at +0x6A. The last
+    battle's enemies stay with 0 HP. The party at `0x08CC51F8 + n * 0x80`, same fields, is up to
+    date on the field but behind in battles.
+  - `0x08B967BC` is 8 on the field and on the result screen, 0 in a battle and 13 while talking to
+    a demon; a battle is shown while it isn't 8 and an enemy is alive.
+  - Dungeons: the facing as f32 degrees at `0x08CCD8CC` (0 north, -90 east); the dungeon object at
+    `*0x08CCBD5C` has the column at +0x2A, the row at +0x2C, the dungeon (0x11 for `pack/dng/d11`)
+    at +0x46 and the floor at +0x48. The cells walked through are 72-byte bitmaps (24 rows of 3
+    bytes, most significant bit first) from `0x08CC689C`, block `u8[0x08A92AD4 + dungeon] +
+    floor`, the formula in the game's marking code at `0x0884C3DC`; a cell is marked once it's left.
+  - Walls and doors come from `dXYm.bin`: u32 section count and sizes, sections from the next
+    16-byte boundary; each floor is a 0x4AC-byte section (0x28-byte header, then 24x24 u16 cell
+    types), and section 1 holds 12-byte type records from +0x14 (type t at (t - 1) * 12) with the
+    north, south, east and west wall pieces in bytes 4-7. A door type has 4 or 5 in the low half of
+    byte 3 and its side in the high half of byte 2 (1 N, 2 W, 4 E, 8 S); its pieces belong to the
+    door. Room types have no pieces (walls come from the empty cells around them), and the pieces
+    of a room's entrance cell towards the room are a frame. Checked on Lost Forest 1F only.
+  - Portraits from the disc: the party's HUD faces are GIMs 0-8 of `pack/ch_menu.bin` (u32 count,
+    u32 sizes, files from the next 16-byte boundary), demon n is GIM 2n of `pack/DVLAN.BIN` (u32
+    start/end pairs from +8), the Analyze sprite (see `Persona1Art`, `Tools/duo/formats/p1_pack.py`
+    and `p1_dngmap.py`).
 - **Duel** (Yu-Gi-Oh! GX Tag Force, ULES00600 v1.01): the card under the cursor drawn like the
   game's own (frame tinted by kind, attribute icon, level stars, text box with ATK/DEF), its name,
   type and full text, a silver ATK/DEF panel with gold digits, both players' Life Points, whose

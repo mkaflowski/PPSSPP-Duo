@@ -48,13 +48,15 @@ When one of these games starts, its mod opens on the second screen by itself.
 | **Jeanne d'Arc** | Battle | Your party and the enemies with HP, MP and level, and the turn number, drawn like the game's status window with its portraits and lettering (the defeated in black and white, guests tagged) | UCUS98700 v1.00 (US) |
 | **WipEout Pure** | Race | Position, lap, speed with the HUD's speed bar, shield energy, race and lap times (last and best), and a map of the track that draws itself from where every ship has been, all in the game's own HUD lettering | UCUS98612 v2.00 (US) |
 | **Persona 3 Portable** | Analyze | During battles, your party's HP and SP with their HUD faces, and every enemy's level, arcana, HP and affinities (weak, strong, null, repel, drain), drawn like the game's Analyze screen with its element icons | ULES01523 v1.01 (EU) |
+| **Persona** | Party | In battles, a card for each party member and enemy in the style of Shin Megami Tensei IV, with portraits from the disc, HP, SP and level; in dungeons, the map of the floor you've walked (walls and doors included) with your party's HP and SP below | ULUS10432 v1.00 (US) |
 | **Yu-Gi-Oh! GX Tag Force** | Duel | The card under the cursor in full, drawn with the game's own card frame and high-quality artwork, its text, ATK/DEF panel, attribute and level; both players' Life Points, whose turn it is and the phase | ULES00600 v1.01 (EU) |
 
 Other releases of these games are recognized too, and the mods look up the game data at runtime
 rather than relying on fixed addresses, but only the versions above have been tested. Jeanne d'Arc,
 Metal Gear Ac!d and WipEout Pure are the exceptions: their mods only support the US release.
 The Persona 3 Portable mod only supports the European release (the US one is recognized, but
-untested). The Yu-Gi-Oh! GX Tag Force mod only supports the European release.
+untested). The Yu-Gi-Oh! GX Tag Force mod only supports the European release, and the Persona mod
+only the US one.
 
 <p align="center">
   <img src="docs/images/duo/drums.png" width="48%" alt="Patapon drums">

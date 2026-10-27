@@ -102,6 +102,11 @@
     <string name="duo_mod_persona3">Analiza</string>
     <string name="duo_mod_persona3_desc">Persona 3 Portable: HP i SP drużyny oraz poziom, HP i odporności każdego wroga w czasie walki</string>
     <string name="duo_persona3_idle">Zacznij walkę, żeby zobaczyć drużynę i wrogów</string>
+    <string name="duo_mod_persona1">Drużyna</string>
+    <string name="duo_mod_persona1_desc">Persona: HP i SP drużyny oraz HP i SP każdego wroga w czasie walki</string>
+    <string name="duo_persona1_party">DRUŻYNA</string>
+    <string name="duo_persona1_enemies">WROGOWIE</string>
+    <string name="duo_persona1_waiting">Czekam na drużynę…</string>
 
     <string name="duo_mod_diagnostics">Diagnostyka</string>
     <string name="duo_diag_copy_logs">Kopiuj logi</string>
