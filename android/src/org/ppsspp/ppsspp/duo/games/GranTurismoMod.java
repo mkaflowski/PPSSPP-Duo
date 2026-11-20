@@ -800,6 +800,17 @@ public final class GranTurismoMod extends DuoMod {
 
 		// Centered text broken into lines at spaces to fit maxW, with the paint's current size.
 		private void drawWrapped(Canvas canvas, String text, float cx, float cy, float maxW) {
+			ArrayList<String> lines = wrapLines(text, maxW);
+			float lineH = paint.getTextSize() * 1.3f;
+			float y = cy - lineH * (lines.size() - 1) / 2 - (paint.descent() + paint.ascent()) / 2;
+			for (String s : lines) {
+				canvas.drawText(s, cx, y, paint);
+				y += lineH;
+			}
+		}
+
+		// Text broken into lines at spaces to fit maxW, with the paint's current size.
+		private ArrayList<String> wrapLines(String text, float maxW) {
 			ArrayList<String> lines = new ArrayList<>();
 			String line = "";
 			for (String word : text.split(" ")) {
@@ -812,12 +823,7 @@ public final class GranTurismoMod extends DuoMod {
 				}
 			}
 			lines.add(line);
-			float lineH = paint.getTextSize() * 1.3f;
-			float y = cy - lineH * (lines.size() - 1) / 2 - (paint.descent() + paint.ascent()) / 2;
-			for (String s : lines) {
-				canvas.drawText(s, cx, y, paint);
-				y += lineH;
-			}
+			return lines;
 		}
 
 		// World to screen for the map: x right, z down (as on the game's own map), fitted to the box.
@@ -1023,8 +1029,21 @@ public final class GranTurismoMod extends DuoMod {
 			float digitH = Math.min(h * 0.24f, w / 4.6f);
 			float tachH = Math.max(DuoUi.dp(ctx, 12), Math.min(DuoUi.dp(ctx, 34), h * 0.07f));
 			float numH = Math.max(DuoUi.dp(ctx, 10), tachH * 0.6f);
+			// A long name goes on two lines; if it still doesn't fit, the text gets smaller.
+			ArrayList<String> nameLines = new ArrayList<>();
+			if (!carLabel.isEmpty()) {
+				paint.setTextSize(nameSize);
+				nameLines = wrapLines(carLabel, w);
+				while (nameLines.size() > 2 && nameSize > DuoUi.dp(ctx, 10)) {
+					nameSize *= 0.9f;
+					paint.setTextSize(nameSize);
+					nameLines = wrapLines(carLabel, w);
+				}
+			}
+			float nameLineH = nameSize * 1.25f;
+			float nameBand = nameSize * 1.6f + nameLineH * Math.max(0, nameLines.size() - 1);
 			// What's left above the speed goes to the picture.
-			float below = nameSize * 1.6f + digitH * 1.15f + numH * 1.6f + tachH + barH * 1.2f;
+			float below = nameBand + digitH * 1.15f + numH * 1.6f + tachH + barH * 1.2f;
 			float imgH = Math.max(0, Math.min(Math.min(h * 0.36f, w * 0.7f * 168 / 224f), pedalsTop - t - below));
 			// Spare height spreads out between the bands.
 			float spare = Math.max(0, pedalsTop - t - below - imgH) / 4;
@@ -1035,14 +1054,18 @@ public final class GranTurismoMod extends DuoMod {
 				canvas.drawBitmap(carImage, null, rect, bmpPaint);
 			}
 			y += imgH;
-			if (!carLabel.isEmpty()) {
+			if (!nameLines.isEmpty()) {
 				paint.setStyle(Paint.Style.FILL);
 				paint.setTextAlign(Paint.Align.CENTER);
 				paint.setColor(DuoUi.COLOR_TEXT);
 				paint.setTextSize(nameSize);
-				canvas.drawText(carLabel, cx, y + nameSize * 1.15f, paint);
+				float ny = y + nameSize * 1.15f;
+				for (String s : nameLines) {
+					canvas.drawText(s, cx, ny, paint);
+					ny += nameLineH;
+				}
 			}
-			y += nameSize * 1.6f + spare;
+			y += nameBand + spare;
 
 			// Speed (the HUD's italic digits), km/h, and the gear in its box on the left.
 			float baseline = y + digitH * 1.05f;
