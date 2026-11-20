@@ -1889,7 +1889,10 @@ public class PpssppActivity extends AppCompatActivity implements SensorEventList
 
 		Log.i(TAG, "onNewIntent: " + intent.toString());
 
-		if (intent.hasExtra("request_id")) {
+		if (intent.hasExtra(org.ppsspp.ppsspp.duo.DuoManager.EXTRA_MOVE_DISPLAY)) {
+			// PPSSPP Duo moved us to another display. Keep the intent we were started with.
+			return;
+		} else if (intent.hasExtra("request_id")) {
 			logIntentExtras(intent);
 			int requestId = intent.getIntExtra("request_id", -1);
 			int resultCode = intent.getIntExtra("result_code", NativeApp.RESULT_CANCELED);

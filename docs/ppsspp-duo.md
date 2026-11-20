@@ -23,6 +23,14 @@ DuoNative (JNI) ── android/jni/DuoBridge.cpp ── DuoBridge_OnFrame() on t
 - `DuoManager`: shown between `onStart` and `onStop` (survives `onPause`). Follows display hotplug
   and panel on/off with a debounced refresh. Displays are ranked by flags (user choice,
   `FLAG_PRESENTATION`, `FLAG_SECURE`), no device names.
+- Swap screens (`DuoSettings.getGameOnSecondDisplay()`, off by default): for devices whose display 0
+  is the bottom panel (Anbernic RG DS). `DuoManager.moveGameIfNeeded()` relaunches the
+  `singleInstance` activity on the best other display with `ActivityOptions.setLaunchDisplayId()`
+  (API 26+); the system reparents the task and recreates the activity there (the display change is
+  not in `configChanges`), which keeps the emulator running like a rotation does. The Presentation
+  then lands on display 0. The relaunch intent carries `EXTRA_MOVE_DISPLAY`, which `onNewIntent`
+  ignores. Turning the setting or the second screen off moves the game back to display 0. A move the
+  system ignores isn't retried until the setting changes or a display comes or goes.
 - `DuoPresentation`: `FLAG_NOT_FOCUSABLE` so touching the second screen doesn't take input focus
   from the game (verified on the Thor: focus stays on display 0). Every mod callback is wrapped, a
   failing mod is logged and replaced by an error view.
@@ -32,7 +40,7 @@ DuoNative (JNI) ── android/jni/DuoBridge.cpp ── DuoBridge_OnFrame() on t
   copied between frames, so the UI thread never reads live emulator state.
 - Master switch: `g_Config.bDualScreen` (Settings > System > "Use second screen"). Mod choices
   live in SharedPreferences (`DuoSettings`): default mod, remembered mod per game, haptics,
-  immersive mode, display.
+  immersive mode, display, swap screens.
 - Immersive mode (on by default): a mod made for the running game (priority above 0) gets the
   whole screen, the tab bar is hidden. The generic mods and the settings keep their tabs. A swipe
   in from the middle of the left or right edge shows the tabs for 4 s or hides them again; the

@@ -74,7 +74,9 @@ only the US one.
 - **Diagnostics**: emulator status, display info and a memory view, for mod developers.
 
 Switch mods with the tabs at the top of the second screen; the choice is remembered per game. The
-gear tab has the settings (default mod, haptics, which display to use).
+gear tab has the settings (default mod, haptics, which display to use). On devices where the game
+starts on the bottom screen, like the Anbernic RG DS, turn on **Swap screens** there to move the
+game to the top.
 
 ## Install
 

@@ -15,6 +15,7 @@ public final class DuoSettings {
 	private static final String KEY_IMMERSIVE = "immersive";
 	private static final String KEY_GESTURE_HINT_SHOWN = "gesture_hint_shown";
 	private static final String KEY_PREFERRED_DISPLAY = "preferred_display";
+	private static final String KEY_GAME_ON_SECOND_DISPLAY = "game_on_second_display";
 
 	private final SharedPreferences prefs;
 
@@ -86,5 +87,15 @@ public final class DuoSettings {
 
 	public void setPreferredDisplay(String name) {
 		prefs.edit().putString(KEY_PREFERRED_DISPLAY, name == null ? "" : name).apply();
+	}
+
+	// Swapped screens: the game runs on the second display and the second screen on the main one.
+	// For devices whose main display is the bottom panel (Anbernic RG DS).
+	public boolean getGameOnSecondDisplay() {
+		return prefs.getBoolean(KEY_GAME_ON_SECOND_DISPLAY, false);
+	}
+
+	public void setGameOnSecondDisplay(boolean value) {
+		prefs.edit().putBoolean(KEY_GAME_ON_SECOND_DISPLAY, value).apply();
 	}
 }

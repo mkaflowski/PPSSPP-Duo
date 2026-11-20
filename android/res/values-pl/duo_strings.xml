@@ -15,6 +15,8 @@
     <string name="duo_settings_default_mod">Domyślny mod</string>
     <string name="duo_settings_display">Ekran</string>
     <string name="duo_setting_display_auto">Automatycznie</string>
+    <string name="duo_setting_swap_screens">Zamień ekrany</string>
+    <string name="duo_setting_swap_screens_desc">Gra działa na drugim wyświetlaczu, a ten ekran na głównym. Dla urządzeń, w których głównym wyświetlaczem jest dolny, jak Anbernic RG DS</string>
     <string name="duo_turn_off">Wyłącz drugi ekran</string>
     <string name="duo_turn_off_hint">Włączysz go z powrotem w PPSSPP: Ustawienia, System, \"Use second screen (dual-screen devices)\".</string>
 

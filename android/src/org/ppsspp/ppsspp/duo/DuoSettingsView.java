@@ -95,6 +95,10 @@ final class DuoSettingsView extends ScrollView {
 		updateModRows();
 
 		header(ctx.getString(R.string.duo_settings_display));
+		toggle(ctx.getString(R.string.duo_setting_swap_screens) + "\n" + ctx.getString(R.string.duo_setting_swap_screens_desc), settings.getGameOnSecondDisplay(), value -> {
+			settings.setGameOnSecondDisplay(value);
+			callback.onDisplayConfigChanged();
+		});
 		TextView auto = row(ctx.getString(R.string.duo_setting_display_auto));
 		auto.setTag("");
 		displayRows.add(auto);

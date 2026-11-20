@@ -1,8 +1,11 @@
 package org.ppsspp.ppsspp.duo;
 
 import android.app.Activity;
+import android.app.ActivityOptions;
 import android.content.Context;
+import android.content.Intent;
 import android.hardware.display.DisplayManager;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
@@ -24,6 +27,15 @@ public final class DuoManager implements DisplayManager.DisplayListener, DuoPres
 	private static final String TAG = "PPSSPPDuo";
 	// Display events come in bursts (added, then changed a few times while the panel powers up).
 	private static final long REFRESH_DEBOUNCE_MS = 300;
+
+	// Marks the intent we send ourselves to move the game to another display. PpssppActivity
+	// ignores it in onNewIntent.
+	public static final String EXTRA_MOVE_DISPLAY = "org.ppsspp.ppssppduo.MOVE_DISPLAY";
+
+	// The display we last asked the system to move the game to, or -1. Static because the move
+	// recreates the activity. If the system ignored the request we'd otherwise ask again on every
+	// display event; it's cleared when the setting changes or a display comes or goes.
+	private static int moveAttemptedTo = -1;
 
 	private final Activity activity;
 	private final DisplayManager displayManager;
@@ -82,24 +94,28 @@ public final class DuoManager implements DisplayManager.DisplayListener, DuoPres
 
 	// g_Config.bDualScreen changed (System settings).
 	public void onConfigChanged() {
+		moveAttemptedTo = -1;
 		scheduleRefresh(0);
 	}
 
 	@Override
 	public void onDisplayConfigChanged() {
 		// Called from inside the presentation; don't dismiss it in the middle of a click handler.
+		moveAttemptedTo = -1;
 		scheduleRefresh(0);
 	}
 
 	@Override
 	public void onDisplayAdded(int displayId) {
 		failedDisplays.clear();
+		moveAttemptedTo = -1;
 		scheduleRefresh(REFRESH_DEBOUNCE_MS);
 	}
 
 	@Override
 	public void onDisplayRemoved(int displayId) {
 		failedDisplays.clear();
+		moveAttemptedTo = -1;
 		scheduleRefresh(REFRESH_DEBOUNCE_MS);
 	}
 
@@ -122,6 +138,12 @@ public final class DuoManager implements DisplayManager.DisplayListener, DuoPres
 
 	@SuppressWarnings("deprecation")
 	private int activityDisplayId() {
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+			Display d = activity.getDisplay();
+			if (d != null) {
+				return d.getDisplayId();
+			}
+		}
 		WindowManager wm = activity.getWindowManager();
 		Display d = wm != null ? wm.getDefaultDisplay() : null;
 		return d != null ? d.getDisplayId() : Display.DEFAULT_DISPLAY;
@@ -129,6 +151,10 @@ public final class DuoManager implements DisplayManager.DisplayListener, DuoPres
 
 	private void refresh() {
 		if (!started || activity.isFinishing() || displayManager == null) {
+			return;
+		}
+
+		if (moveGameIfNeeded()) {
 			return;
 		}
 
@@ -156,6 +182,60 @@ public final class DuoManager implements DisplayManager.DisplayListener, DuoPres
 		if (candidates.isEmpty()) {
 			Log.i(TAG, isEnabled() ? "No secondary display" : "Second screen disabled");
 		}
+	}
+
+	// Puts the game on the display the "game on the second screen" setting asks for. Returns true if
+	// it asked the system to move the game; the activity is then recreated on the new display and
+	// shows the second screen from there.
+	private boolean moveGameIfNeeded() {
+		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+			return false;
+		}
+		int current = activityDisplayId();
+		int target;
+		if (isEnabled() && settings.getGameOnSecondDisplay()) {
+			if (current != Display.DEFAULT_DISPLAY) {
+				return false;
+			}
+			List<Display> others = DuoDisplayPicker.candidates(displayManager, Display.DEFAULT_DISPLAY,
+				settings.getPreferredDisplay(), java.util.Collections.emptySet());
+			if (others.isEmpty()) {
+				return false;
+			}
+			target = others.get(0).getDisplayId();
+		} else {
+			// Back to the main display, also when the second screen is turned off.
+			if (current == Display.DEFAULT_DISPLAY) {
+				return false;
+			}
+			target = Display.DEFAULT_DISPLAY;
+		}
+		if (target == moveAttemptedTo) {
+			// Already asked, and we're still not there.
+			return false;
+		}
+		moveAttemptedTo = target;
+
+		Display targetDisplay = displayManager.getDisplay(target);
+		Log.i(TAG, "Moving the game from display " + current + " to " +
+			(targetDisplay != null ? DuoDisplayPicker.describe(targetDisplay) : "#" + target));
+		// The second screen may be on the target display, and it would sit on top of the game.
+		dismiss();
+		try {
+			Intent intent = new Intent(activity, activity.getClass());
+			intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+			intent.putExtra(EXTRA_MOVE_DISPLAY, true);
+			ActivityOptions options = ActivityOptions.makeBasic();
+			options.setLaunchDisplayId(target);
+			activity.startActivity(intent, options.toBundle());
+		} catch (RuntimeException e) {
+			// SecurityException if the system won't launch on that display.
+			Log.w(TAG, "Couldn't move the game to display " + target + ": " + e);
+			return false;
+		}
+		// If the system ignores the request nothing else happens, so check again in a moment.
+		scheduleRefresh(1000);
+		return true;
 	}
 
 	private boolean show(Display display) {
