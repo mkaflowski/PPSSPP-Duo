@@ -1,3 +1,5 @@
+**English** | [台灣繁體中文](README.zh-TW.md)
+
 <p align="center">
   <img src="docs/images/duo/logo.png" width="160" alt="PPSSPP Duo logo">
 </p>

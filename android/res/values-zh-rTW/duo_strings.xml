@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PPSSPP Duo: 第二螢幕介面 -->
+<resources>
+    <string name="duo_settings">第二螢幕設定</string>
+    <string name="duo_mod_failed">模組「%1$s」啟動失敗。</string>
+
+    <string name="duo_settings_general">一般</string>
+    <string name="duo_setting_remember_per_game">為每款遊戲記住選用的模組</string>
+    <string name="duo_setting_haptics">觸覺回饋</string>
+    <string name="duo_setting_immersive">沉浸模式</string>
+    <string name="duo_setting_immersive_desc">在為執行中遊戲設計的畫面上隱藏分頁列。從左或右邊緣中段向內滑動即可喚回（與 Android 返回手勢相同）</string>
+    <string name="duo_gesture_hint_title">分頁列已隱藏</string>
+    <string name="duo_gesture_hint_text">從左或右邊緣中段（標記處）向內滑動即可喚回分頁列。可在第二螢幕設定中關閉沉浸模式。</string>
+    <string name="duo_gesture_hint_ok">知道了</string>
+    <string name="duo_settings_default_mod">預設模組</string>
+    <string name="duo_settings_display">顯示器</string>
+    <string name="duo_setting_display_auto">自動</string>
+    <string name="duo_setting_swap_screens">互換螢幕</string>
+    <string name="duo_setting_swap_screens_desc">將遊戲顯示於第二螢幕，並將此畫面顯示於主螢幕。適用於主螢幕在下的裝置（如 Anbernic RG DS）</string>
+    <string name="duo_turn_off">關閉第二螢幕</string>
+    <string name="duo_turn_off_hint">可在 PPSSPP 的「設定 → 系統 → 使用第二螢幕（雙螢幕裝置）」重新開啟。</string>
+
+    <string name="duo_mod_dashboard">儀表板</string>
+    <string name="duo_mod_dashboard_desc">遊戲資訊、即時存檔、速度與其他快捷操作</string>
+    <string name="duo_save_state">即時存檔</string>
+    <string name="duo_load_state">即時讀檔</string>
+    <string name="duo_fast_forward">快轉</string>
+    <string name="duo_speed_toggle">切換速度</string>
+    <string name="duo_rewind">倒轉</string>
+    <string name="duo_pause_menu">選單</string>
+    <string name="duo_freeze">暫停</string>
+    <string name="duo_screenshot">螢幕擷取</string>
+    <string name="duo_mute">靜音</string>
+    <string name="duo_no_game">沒有執行中的遊戲</string>
+    <string name="duo_no_game_hint">請在主螢幕選擇一款遊戲</string>
+    <string name="duo_state_paused">已暫停</string>
+    <string name="duo_state_frozen">已凍結</string>
+    <string name="duo_session_minutes">%1$d 分鐘</string>
+    <string name="duo_perf">%1$d FPS · %2$d%%</string>
+    <string name="duo_slot">欄位 %1$d</string>
+    <string name="duo_slot_empty">空白</string>
+
+    <string name="duo_mod_gamepad">手把</string>
+    <string name="duo_mod_gamepad_desc">所有 PSP 按鍵與類比搖桿的觸控操作</string>
+    <string name="duo_mod_blank">關閉螢幕</string>
+    <string name="duo_mod_blank_desc">純黑畫面。點擊頂部邊緣即可喚回分頁列</string>
+    <string name="duo_mod_patapon">戰鼓</string>
+    <string name="duo_mod_patapon_desc">Patapon 與 Patapon 2：戰鼓按鍵與隨節奏亮起的戰歌譜</string>
+    <string name="duo_patapon_style_classic">經典</string>
+    <string name="duo_patapon_style_game">遊戲風格</string>
+    <string name="duo_patapon_march">前進</string>
+    <string name="duo_patapon_attack">攻擊</string>
+    <string name="duo_patapon_defend">防禦</string>
+    <string name="duo_patapon_charge">蓄力</string>
+    <string name="duo_patapon_retreat">撤退</string>
+    <string name="duo_patapon_jump">跳躍</string>
+    <string name="duo_patapon_party">慶典</string>
+    <string name="duo_patapon_miracle">奇蹟</string>
+
+    <string name="duo_mod_gta_map">地圖</string>
+    <string name="duo_mod_gta_map_desc">GTA：自由城傳奇：由遊戲雷達建立的城市地圖與目前位置</string>
+    <string name="duo_gta_building_map">正在從遊戲建立地圖…</string>
+    <string name="duo_gta_no_player">尚未支援此遊戲版本的位置顯示</string>
+
+    <string name="duo_gta_rotate">地圖隨玩家方向旋轉</string>
+
+    <string name="duo_mod_lumines">Lumines</string>
+    <string name="duo_mod_lumines_desc">Lumines：大型下個方塊預覽、分數與盤面填滿度</string>
+    <string name="duo_lumines_idle">開始遊戲以檢視下個方塊</string>
+    <string name="duo_lumines_waiting">正在等待遊戲…（可能尚未支援此版本）</string>
+    <string name="duo_lumines_next">下一個</string>
+    <string name="duo_lumines_score">分數</string>
+    <string name="duo_lumines_hiscore">最高分</string>
+    <string name="duo_lumines_deleted">已消除</string>
+    <string name="duo_lumines_time">時間</string>
+    <string name="duo_lumines_fill">盤面已填滿 %1$d%%</string>
+    <string name="duo_mod_gt">遙測儀表</string>
+    <string name="duo_mod_gt_desc">跑車浪漫旅：時速表、含紅線區的轉速表、踏板與即時繪製的賽道地圖</string>
+    <string name="duo_gt_waiting">開始比賽以檢視遙測資訊</string>
+    <string name="duo_gt_map_hint">賽道地圖會隨您的行駛即時繪製</string>
+    <string name="duo_gt_throttle">油門</string>
+    <string name="duo_gt_brake">煞車</string>
+    <string name="duo_gt_hide_map">隱藏地圖</string>
+    <string name="duo_gt_show_map">顯示地圖</string>
+    <string name="duo_gt_style_classic">經典</string>
+    <string name="duo_gt_style_game">遊戲風格</string>
+    <string name="duo_mod_jeanne">戰鬥</string>
+    <string name="duo_mod_jeanne_desc">聖女貞德：戰鬥中顯示我方隊伍與敵人的頭像、HP 與 MP</string>
+    <string name="duo_jeanne_idle">開始戰鬥以檢視單位資訊</string>
+    <string name="duo_jeanne_turn">第 %1$d 回合</string>
+    <string name="duo_jeanne_party">我方隊伍</string>
+    <string name="duo_jeanne_enemies">敵方單位</string>
+    <string name="duo_jeanne_level">Lv %1$d</string>
+    <string name="duo_mod_mga">卡牌</string>
+    <string name="duo_mod_mga_desc">Metal Gear Ac!d：顯示手牌插圖與完整說明（點擊即可在遊戲中選取）、Snake 生命值、牌組、COST 與回合</string>
+    <string name="duo_mga_idle">開始任務以檢視您的手牌</string>
+    <string name="duo_mga_pick">點擊卡牌即可選取</string>
+    <string name="duo_mga_information">資訊</string>
+    <string name="duo_mga_hand">手牌 (%1$d)</string>
+    <string name="duo_mod_wipeout">競速</string>
+    <string name="duo_mod_wipeout_desc">WipEout Pure：速度、護盾能量、名次、單圈時間與顯示所有賽車的賽道地圖</string>
+    <string name="duo_wipeout_idle">開始比賽以檢視遙測資訊</string>
+    <string name="duo_wipeout_map_hint">賽道地圖會隨賽車行駛即時繪製</string>
+    <string name="duo_mod_persona3">敵情分析</string>
+    <string name="duo_mod_persona3_desc">女神異聞錄 3 攜帶版：戰鬥中顯示我方 HP/SP 與所有敵人的等級、HP 與屬性耐性</string>
+    <string name="duo_persona3_idle">開始戰鬥以檢視我方隊伍與敵人資訊</string>
+    <string name="duo_mod_persona1">隊伍</string>
+    <string name="duo_mod_persona1_desc">女神異聞錄：戰鬥中顯示我方隊伍與所有敵人的 HP 與 SP</string>
+    <string name="duo_persona1_party">我方隊伍</string>
+    <string name="duo_persona1_enemies">敵方單位</string>
+    <string name="duo_persona1_waiting">正在等待隊伍資訊…</string>
+
+    <string name="duo_mod_diagnostics">診斷</string>
+    <string name="duo_diag_copy_logs">複製紀錄</string>
+    <string name="duo_diag_logs_copied">已複製狀態與 %1$d 行紀錄，可直接貼上於訊息中</string>
+    <string name="duo_mod_diagnostics_desc">模擬器狀態、顯示器資訊與記憶體檢視（供模組開發者使用）</string>
+    <string name="duo_mod_tagforce">決鬥</string>
+    <string name="duo_mod_tagforce_desc">遊戲王 GX Tag Force：完整顯示游標下的卡片（卡圖、效果文字、ATK/DEF）、雙方生命值與階段</string>
+    <string name="duo_tagforce_idle">開始決鬥以檢視卡片與生命值</string>
+    <string name="duo_tagforce_no_card">將游標移動到卡片上</string>
+    <string name="duo_tagforce_loading">正在從光碟讀取卡片…</string>
+    <string name="duo_tagforce_you">我方</string>
+    <string name="duo_tagforce_opponent">對手</string>
+    <string name="duo_tagforce_your_turn">我方回合</string>
+    <string name="duo_tagforce_opp_turn">對手回合</string>
+</resources>
