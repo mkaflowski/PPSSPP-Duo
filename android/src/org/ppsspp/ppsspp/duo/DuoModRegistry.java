@@ -8,6 +8,7 @@ import org.ppsspp.ppsspp.duo.games.MetalGearAcidMod;
 import org.ppsspp.ppsspp.duo.games.PataponMod;
 import org.ppsspp.ppsspp.duo.games.Persona3Mod;
 import org.ppsspp.ppsspp.duo.games.Persona1Mod;
+import org.ppsspp.ppsspp.duo.games.Persona2InnocentSinMod;
 import org.ppsspp.ppsspp.duo.games.TagForceMod;
 import org.ppsspp.ppsspp.duo.games.WipeoutPureMod;
 import org.ppsspp.ppsspp.duo.mods.BlankMod;
@@ -39,6 +40,7 @@ public final class DuoModRegistry {
 		mods.add(new WipeoutPureMod());
 		mods.add(new Persona3Mod());
 		mods.add(new Persona1Mod());
+		mods.add(new Persona2InnocentSinMod());
 		mods.add(new TagForceMod());
 		mods.add(new BlankMod());
 		mods.add(new DiagnosticsMod());
